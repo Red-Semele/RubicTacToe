@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Rubik's Cube Tic Tac Toe</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #e0e0e0;
+            perspective: 1000px;
+        }
+
+        .cube {
+            width: 150px;
+            height: 150px;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.5s ease;
+        }
+
+        .face {
+            position: absolute;
+            width: 150px;
+            height: 150px;
+            display: flex;
+            flex-wrap: wrap;
+            transform-style: preserve-3d;
+        }
+
+        .face div {
+            width: 33.33%;
+            height: 33.33%;
+            box-sizing: border-box;
+            border: 1px solid #999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            color: white;
+            cursor: pointer; /* Show cursor pointer for clickable squares */
+        }
+
+        .front  { background: red;    transform: translateZ(75px); }
+        .back   { background: orange; transform: rotateY(180deg) translateZ(75px); }
+        .right  { background: green;  transform: rotateY(90deg) translateZ(75px); }
+        .left   { background: blue;   transform: rotateY(-90deg) translateZ(75px); }
+        .top    { background: white;  transform: rotateX(90deg) translateZ(75px); }
+        .bottom { background: yellow; transform: rotateX(-90deg) translateZ(75px); }
+    </style>
+</head>
+<body>
+
+<div class="cube" id="cube">
+    <div class="face front">
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+    </div>
+    <div class="face back">
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+    </div>
+    <div class="face right">
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+    </div>
+    <div class="face left">
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+    </div>
+    <div class="face top">
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+    </div>
+    <div class="face bottom">
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+    </div>
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html> 
