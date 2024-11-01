@@ -416,7 +416,7 @@ function rotateSColumn(columnIndex) {
     // 3. Move the column from the right face to the row of the top face
     for (let i = 0; i < 3; i++) {
         topLayer[columnIndex * 3 + i].setAttribute('data-color', tempRightColors[i * 3 + oppositeColumnIndex]);
-        topLayer[oppositeColumnIndex * 3 + i].innerText = tempRightText[i * 3 + oppositeColumnIndex];
+        topLayer[columnIndex * 3 + i].innerText = tempRightText[i * 3 + oppositeColumnIndex];
     }
 
    // 4. Move the row from the top face to the selected column of the left face in reverse order
