@@ -3,91 +3,156 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Rubik's Cube Tic Tac Toe</title>
+    <title>3D Interactive Rubik's Cube</title>
     <style>
         body {
             display: flex;
-            justify-content: center;
+            flex-direction: column;
             align-items: center;
-            height: 100vh;
-            background: #e0e0e0;
-            perspective: 1000px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
         }
 
-        .cube {
-            width: 150px;
-            height: 150px;
+        h1 {
+            margin: 20px;
+        }
+
+        #cube {
             position: relative;
+            width: 300px;
+            height: 300px;
             transform-style: preserve-3d;
-            transition: transform 0.5s ease;
+            transform: rotateX(30deg) rotateY(30deg);
+            transition: transform 0.5s; /* Transition effect for rotation */
         }
 
         .face {
             position: absolute;
-            width: 150px;
-            height: 150px;
-            display: flex;
-            flex-wrap: wrap;
-            transform-style: preserve-3d;
+            width: 300px;
+            height: 300px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
         }
 
-        .face div {
-            width: 33.33%;
-            height: 33.33%;
-            box-sizing: border-box;
-            border: 1px solid #999;
+        .block {
+            border: 1px solid #ccc;
             display: flex;
             justify-content: center;
             align-items: center;
             font-size: 24px;
-            color: white;
-            cursor: pointer; /* Show cursor pointer for clickable squares */
+            font-weight: bold;
+            transition: background-color 0.3s;
         }
 
-        .front  { background: red;    transform: translateZ(75px); }
-        .back   { background: blue; transform: rotateY(180deg) translateZ(75px); }
-        .right  { background: green;  transform: rotateY(90deg) translateZ(75px); }
-        .left   { background: orange;   transform: rotateY(-90deg) translateZ(75px); }
-        .top    { background: white;  transform: rotateX(90deg) translateZ(75px); }
-        .bottom { background: yellow; transform: rotateX(-90deg) translateZ(75px); }
+        .front  { background-color: red;    transform: translateZ(150px); }
+        .back   { background-color: orange; transform: rotateY(180deg) translateZ(150px); }
+        .right  { background-color: green;  transform: rotateY(90deg) translateZ(150px); }
+        .left   { background-color: blue;   transform: rotateY(-90deg) translateZ(150px); }
+        .top    { background-color: yellow;  transform: rotateX(90deg) translateZ(150px); }
+        .bottom { background-color: white;  transform: rotateX(-90deg) translateZ(150px); }
+
+        #controls {
+            margin-top: 20px;
+        }
+
+        button {
+            margin: 5px;
+            padding: 10px;
+        }
+
+        /* Debugging styles */
+        .debug {
+            color: black;
+            background-color: rgba(255, 255, 255, 0.5);
+        }
     </style>
 </head>
 <body>
+    <h1>3D Interactive Rubik's Cube</h1>
+    <div id="cube">
+        <div class="face front">
+            <div class="block" id="f0">R</div>
+            <div class="block" id="f1">R</div>
+            <div class="block" id="f2">R</div>
+            <div class="block" id="f3">R</div>
+            <div class="block" id="f4">R</div>
+            <div class="block" id="f5">R</div>
+            <div class="block" id="f6">R</div>
+            <div class="block" id="f7">R</div>
+            <div class="block" id="f8">R</div>
+        </div>
+        <div class="face back">
+            <div class="block" id="b0">O</div>
+            <div class="block" id="b1">O</div>
+            <div class="block" id="b2">O</div>
+            <div class="block" id="b3">O</div>
+            <div class="block" id="b4">O</div>
+            <div class="block" id="b5">O</div>
+            <div class="block" id="b6">O</div>
+            <div class="block" id="b7">O</div>
+            <div class="block" id="b8">O</div>
+        </div>
+        <div class="face right">
+            <div class="block" id="r0">G</div>
+            <div class="block" id="r1">G</div>
+            <div class="block" id="r2">G</div>
+            <div class="block" id="r3">G</div>
+            <div class="block" id="r4">G</div>
+            <div class="block" id="r5">G</div>
+            <div class="block" id="r6">G</div>
+            <div class="block" id="r7">G</div>
+            <div class="block" id="r8">G</div>
+        </div>
+        <div class="face left">
+            <div class="block" id="l0">B</div>
+            <div class="block" id="l1">B</div>
+            <div class="block" id="l2">B</div>
+            <div class="block" id="l3">B</div>
+            <div class="block" id="l4">B</div>
+            <div class="block" id="l5">B</div>
+            <div class="block" id="l6">B</div>
+            <div class="block" id="l7">B</div>
+            <div class="block" id="l8">B</div>
+        </div>
+        <div class="face top">
+            <div class="block" id="u0">Y</div>
+            <div class="block" id="u1">Y</div>
+            <div class="block" id="u2">Y</div>
+            <div class="block" id="u3">Y</div>
+            <div class="block" id="u4">Y</div>
+            <div class="block" id="u5">Y</div>
+            <div class="block" id="u6">Y</div>
+            <div class="block" id="u7">Y</div>
+            <div class="block" id="u8">Y</div>
+        </div>
+        <div class="face bottom">
+            <div class="block" id="d0">W</div>
+            <div class="block" id="d1">W</div>
+            <div class="block" id="d2">W</div>
+            <div class="block" id="d3">W</div>
+            <div class="block" id="d4">W</div>
+            <div class="block" id="d5">W</div>
+            <div class="block" id="d6">W</div>
+            <div class="block" id="d7">W</div>
+            <div class="block" id="d8">W</div>
+        </div>
+    </div>
+    <div id="controls">
+        <h2>Controls</h2>
+        <div class="row">
+            <button onclick="rotateRow(0)">Rotate Row 1</button>
+            <button onclick="rotateRow(1)">Rotate Row 2</button>
+            <button onclick="rotateRow(2)">Rotate Row 3</button>
+        </div>
+        <div class="column">
+            <button onclick="rotateColumn(0)">Rotate Column 1</button>
+            <button onclick="rotateColumn(1)">Rotate Column 2</button>
+            <button onclick="rotateColumn(2)">Rotate Column 3</button>
+        </div>
+    </div>
 
-<div class="cube" id="cube">
-    <div class="face front">
-        <div></div><div></div><div></div>
-        <div></div><div></div><div></div>
-        <div></div><div></div><div></div>
-    </div>
-    <div class="face back">
-        <div></div><div></div><div></div>
-        <div></div><div></div><div></div>
-        <div></div><div></div><div></div>
-    </div>
-    <div class="face right">
-        <div></div><div></div><div></div>
-        <div></div><div></div><div></div>
-        <div></div><div></div><div></div>
-    </div>
-    <div class="face left">
-        <div></div><div></div><div></div>
-        <div></div><div></div><div></div>
-        <div></div><div></div><div></div>
-    </div>
-    <div class="face top">
-        <div></div><div></div><div></div>
-        <div></div><div></div><div></div>
-        <div></div><div></div><div></div>
-    </div>
-    <div class="face bottom">
-        <div></div><div></div><div></div>
-        <div></div><div></div><div></div>
-        <div></div><div></div><div></div>
-    </div>
-</div>
-
-<script src="script.js"></script>
-
+    <script src="script.js"></script>
+   
 </body>
-</html> 
+</html>

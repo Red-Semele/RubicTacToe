@@ -1,279 +1,353 @@
 const cube = document.getElementById('cube');
-let isDragging = false;
-let startX, startY;
-const dragThreshold = 10; // Minimum drag distance before triggering a twist
-let dragDirection = null; // Track the drag direction
-let selectedRow = null; // Track the selected row
-let selectedCol = null; // Track the selected column
-let currentPlayer = 'X'; // Start with player X
+let rotationX = 30; // Initial rotation on X-axis
+let rotationY = 30; // Initial rotation on Y-axis
+let tempBack = ""
+let trueBackLayer = ""
 
-// Initialize the state of the cube
-let cubeState = [
-    ["", "", "", "", "", "", "", "", ""],   // Front
-    ["", "", "", "", "", "", "", "", ""], // Back
-    ["", "", "", "", "", "", "", "", ""], // Right
-    ["", "", "", "", "", "", "", "", ""], // Left
-    ["", "", "", "", "", "", "", "", ""], // Top
-    ["", "", "", "", "", "", "", "", ""] // Bottom
-];
-
-// Initialize the colors of the cube
-let cubeColors = [
-    ["red", "red", "red", "red", "red", "red", "red", "red", "red"], // Front
-    ["blue", "blue", "blue", "blue", "blue", "blue", "blue", "blue", "blue"], // Back
-    ["green", "green", "green", "green", "green", "green", "green", "green", "green"], // Right
-    ["orange", "orange", "orange", "orange", "orange", "orange", "orange", "orange", "orange"], // Left
-    ["white", "white", "white", "white", "white", "white", "white", "white", "white"], // Top
-    ["yellow", "yellow", "yellow", "yellow", "yellow", "yellow", "yellow", "yellow", "yellow"] // Bottom
-];
-
-
-// Cube rotation angles
-let rotateX = 0;
-let rotateY = 0;
-
-// Function to rotate the cube based on keyboard input
-function rotateCube() {
-    cube.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+// Function to rotate the entire cube with arrow keys
+function rotateCube(deltaX, deltaY) {
+    rotationX += deltaX;
+    rotationY += deltaY;
+    cube.style.transform = `rotateX(${rotationX}deg) rotateY(${rotationY}deg)`;
 }
 
-// Keyboard event for cube rotation
-document.addEventListener('keydown', (e) => {
-    switch (e.key) {
-        case 'ArrowUp':
-            rotateX -= 15;
-            break;
-        case 'ArrowDown':
-            rotateX += 15;
-            break;
+// Event listener for arrow keys
+document.addEventListener('keydown', (event) => {
+    switch (event.key) {
         case 'ArrowLeft':
-            rotateY -= 15;
+            rotateCube(0, -10); // Rotate left
             break;
         case 'ArrowRight':
-            rotateY += 15;
+            rotateCube(0, 10); // Rotate right
+            break;
+        case 'ArrowUp':
+            rotateCube(-10, 0); // Rotate up
+            break;
+        case 'ArrowDown':
+            rotateCube(10, 0); // Rotate down
+            break;
+        case 'Shift':
+            toggleDebug(true); // Enable debug mode
             break;
     }
-    rotateCube();
 });
 
-// Function to rotate the cube based on mouse drag
-function handleMouseMove(e) {
-    if (!isDragging) return;
-
-    const deltaX = e.clientX - startX;
-    const deltaY = e.clientY - startY;
-
-    // Determine if dragging is more horizontal or vertical
-    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-        // Check if the drag distance exceeds the threshold
-        if (Math.abs(deltaX) > dragThreshold) {
-            dragDirection = deltaX > 0 ? 'row-right' : 'row-left';
-            if (selectedRow !== null) {
-                twistRow(dragDirection, selectedRow);
-            }
-            startX = e.clientX; // Reset start position for next move
-        }
-    } else {
-        // Check if the drag distance exceeds the threshold
-        if (Math.abs(deltaY) > dragThreshold) {
-            dragDirection = deltaY > 0 ? 'column-down' : 'column-up';
-            if (selectedCol !== null) {
-                twistColumn(dragDirection, selectedCol);
-            }
-            startY = e.clientY; // Reset start position for next move
-        }
-    }
-}
-
-// Mouse down event to start dragging
-cube.addEventListener('mousedown', (e) => {
-    isDragging = true;
-    startX = e.clientX;
-    startY = e.clientY;
-    e.preventDefault(); // Prevent text selection
-
-    // Determine which square was clicked
-    const squareSize = 50; // Size of each square (150 / 3)
-    const x = Math.floor((e.clientX - cube.offsetLeft) / squareSize);
-    const y = Math.floor((e.clientY - cube.offsetTop) / squareSize);
-
-    // Determine selected row or column based on square clicked
-    if (y === 0 || y === 1 || y === 2) {
-        selectedRow = y; // Set selected row based on square
-    }
-    if (x === 0 || x === 1 || x === 2) {
-        selectedCol = x; // Set selected column based on square
+document.addEventListener('keyup', (event) => {
+    if (event.key === 'Shift') {
+        toggleDebug(false); // Disable debug mode
     }
 });
 
-// Mouse up event to stop dragging
-document.addEventListener('mouseup', () => {
-    isDragging = false;
-    dragDirection = null; // Reset drag direction
-    selectedRow = null; // Reset selected row
-    selectedCol = null; // Reset selected column
-});
-
-// Mouse move event
-document.addEventListener('mousemove', handleMouseMove);
-
-// Function to twist a specific row
-function twistRow(direction, rowIndex) {
-    if (direction === 'row-right') {
-        // Twist the selected row of the cube to the right
-        const tempState = cubeState[0].slice(rowIndex * 3, rowIndex * 3 + 3);
-        const tempColors = cubeColors[0].slice(rowIndex * 3, rowIndex * 3 + 3);
-
-        // Update `cubeState` positions
-        cubeState[0].splice(rowIndex * 3, 3, ...cubeState[3].slice(rowIndex * 3, rowIndex * 3 + 3));
-        cubeState[3].splice(rowIndex * 3, 3, ...cubeState[2].slice(rowIndex * 3, rowIndex * 3 + 3));
-        cubeState[2].splice(rowIndex * 3, 3, ...cubeState[1].slice(rowIndex * 3, rowIndex * 3 + 3));
-        cubeState[1].splice(rowIndex * 3, 3, ...tempState);
-
-        // Update `cubeColors` positions
-        cubeColors[0].splice(rowIndex * 3, 3, ...cubeColors[3].slice(rowIndex * 3, rowIndex * 3 + 3));
-        cubeColors[3].splice(rowIndex * 3, 3, ...cubeColors[2].slice(rowIndex * 3, rowIndex * 3 + 3));
-        cubeColors[2].splice(rowIndex * 3, 3, ...cubeColors[1].slice(rowIndex * 3, rowIndex * 3 + 3));
-        cubeColors[1].splice(rowIndex * 3, 3, ...tempColors);
-    } else {
-        // Twist the selected row of the cube to the left
-        const tempState = cubeState[0].slice(rowIndex * 3, rowIndex * 3 + 3);
-        const tempColors = cubeColors[0].slice(rowIndex * 3, rowIndex * 3 + 3);
-
-        // Update `cubeState` positions
-        cubeState[0].splice(rowIndex * 3, 3, ...cubeState[2].slice(rowIndex * 3, rowIndex * 3 + 3));
-        cubeState[2].splice(rowIndex * 3, 3, ...cubeState[1].slice(rowIndex * 3, rowIndex * 3 + 3));
-        cubeState[1].splice(rowIndex * 3, 3, ...cubeState[3].slice(rowIndex * 3, rowIndex * 3 + 3).reverse());
-        cubeState[3].splice(rowIndex * 3, 3, ...tempState);
-
-        // Update `cubeColors` positions
-        cubeColors[0].splice(rowIndex * 3, 3, ...cubeColors[2].slice(rowIndex * 3, rowIndex * 3 + 3));
-        cubeColors[2].splice(rowIndex * 3, 3, ...cubeColors[1].slice(rowIndex * 3, rowIndex * 3 + 3));
-        cubeColors[1].splice(rowIndex * 3, 3, ...cubeColors[3].slice(rowIndex * 3, rowIndex * 3 + 3).reverse());
-        cubeColors[3].splice(rowIndex * 3, 3, ...tempColors);
-    }
-    updateCube();
-}
-// Function to twist a specific column
-function twistColumn(direction, colIndex) {
-    if (direction === 'column-down') {
-        // Twist the selected column of the cube down
-        const tempState = [cubeState[0][colIndex], cubeState[0][colIndex + 3], cubeState[0][colIndex + 6]];
-        const tempColors = [cubeColors[0][colIndex], cubeColors[0][colIndex + 3], cubeColors[0][colIndex + 6]];
-
-        // Update `cubeState` positions
-        [cubeState[0][colIndex], cubeState[0][colIndex + 3], cubeState[0][colIndex + 6]] = [cubeState[4][colIndex], cubeState[4][colIndex + 3], cubeState[4][colIndex + 6]];
-        [cubeState[4][colIndex], cubeState[4][colIndex + 3], cubeState[4][colIndex + 6]] = [cubeState[1][colIndex], cubeState[1][colIndex + 3], cubeState[1][colIndex + 6]];
-        [cubeState[1][colIndex], cubeState[1][colIndex + 3], cubeState[1][colIndex + 6]] = [cubeState[5][colIndex], cubeState[5][colIndex + 3], cubeState[5][colIndex + 6]];
-        [cubeState[5][colIndex], cubeState[5][colIndex + 3], cubeState[5][colIndex + 6]] = tempState;
-
-        // Update `cubeColors` positions
-        [cubeColors[0][colIndex], cubeColors[0][colIndex + 3], cubeColors[0][colIndex + 6]] = [cubeColors[4][colIndex], cubeColors[4][colIndex + 3], cubeColors[4][colIndex + 6]];
-        [cubeColors[4][colIndex], cubeColors[4][colIndex + 3], cubeColors[4][colIndex + 6]] = [cubeColors[1][colIndex], cubeColors[1][colIndex + 3], cubeColors[1][colIndex + 6]];
-        [cubeColors[1][colIndex], cubeColors[1][colIndex + 3], cubeColors[1][colIndex + 6]] = [cubeColors[5][colIndex], cubeColors[5][colIndex + 3], cubeColors[5][colIndex + 6]];
-        [cubeColors[5][colIndex], cubeColors[5][colIndex + 3], cubeColors[5][colIndex + 6]] = tempColors;
-    } else {
-        // Twist the selected column of the cube up
-        const tempState = [cubeState[0][colIndex], cubeState[0][colIndex + 3], cubeState[0][colIndex + 6]];
-        const tempColors = [cubeColors[0][colIndex], cubeColors[0][colIndex + 3], cubeColors[0][colIndex + 6]];
-
-        // Update `cubeState` positions
-        [cubeState[0][colIndex], cubeState[0][colIndex + 3], cubeState[0][colIndex + 6]] = [cubeState[5][colIndex], cubeState[5][colIndex + 3], cubeState[5][colIndex + 6]];
-        [cubeState[5][colIndex], cubeState[5][colIndex + 3], cubeState[5][colIndex + 6]] = [cubeState[1][colIndex], cubeState[1][colIndex + 3], cubeState[1][colIndex + 6]];
-        [cubeState[1][colIndex], cubeState[1][colIndex + 3], cubeState[1][colIndex + 6]] = [cubeState[4][colIndex], cubeState[4][colIndex + 3], cubeState[4][colIndex + 6]];
-        [cubeState[4][colIndex], cubeState[4][colIndex + 3], cubeState[4][colIndex + 6]] = tempState;
-
-        // Update `cubeColors` positions
-        [cubeColors[0][colIndex], cubeColors[0][colIndex + 3], cubeColors[0][colIndex + 6]] = [cubeColors[5][colIndex], cubeColors[5][colIndex + 3], cubeColors[5][colIndex + 6]];
-        [cubeColors[5][colIndex], cubeColors[5][colIndex + 3], cubeColors[5][colIndex + 6]] = [cubeColors[1][colIndex], cubeColors[1][colIndex + 3], cubeColors[1][colIndex + 6]];
-        [cubeColors[1][colIndex], cubeColors[1][colIndex + 3], cubeColors[1][colIndex + 6]] = [cubeColors[4][colIndex], cubeColors[4][colIndex + 3], cubeColors[4][colIndex + 6]];
-        [cubeColors[4][colIndex], cubeColors[4][colIndex + 3], cubeColors[4][colIndex + 6]] = tempColors;
-    }
-    updateCube();
+function rotateRow(rowIndex) {
+    const layers = getRowLayers(rowIndex);
+    rotateLayers(layers, 'row');
 }
 
+function rotateColumn(colIndex) {
+    
+    const layers = getColumnLayers(colIndex);
+    rotateLayers(layers, 'column', colIndex);
+}
 
-// Function to update the visual representation of the cube
-function updateCube() {
-    const faces = cube.children;
-
-    for (let i = 0; i < faces.length; i++) {
-        const squares = faces[i].children;
-        for (let j = 0; j < squares.length; j++) {
-            // Update text to show X or O based on cubeState
-            if (cubeState[i][j]) {
-                squares[j].innerText = cubeState[i][j];
+function toggleDebug(isDebug) {
+    const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+    
+    faces.forEach(faceName => {
+        const faceBlocks = document.querySelectorAll(`.${faceName} .block`);
+        faceBlocks.forEach((block, index) => {
+            if (isDebug) {
+                // Display index relative to the face (0-8 layout)
+                block.innerText = index;
+                block.classList.add('debug'); // Add debug style
             } else {
-                squares[j].innerText = '';
-            }
-            
-            // Set text color for X and O
-            squares[j].style.color = cubeState[i][j] === 'X' ? 'white' : 'black';
-
-            // Set the background color based on cubeColors
-            squares[j].style.backgroundColor = cubeColors[i][j];
-        }
-    }
-}
-
-
-// Function to check for win conditions
-function checkWin() {
-    const winConditions = [
-        // Check rows and columns on each face
-        ...Array.from({ length: 6 }, (_, faceIndex) => {
-            const face = cubeState[faceIndex];
-            return [
-                [face[0], face[1], face[2]],
-                [face[3], face[4], face[5]],
-                [face[6], face[7], face[8]],
-                [face[0], face[3], face[6]],
-                [face[1], face[4], face[7]],
-                [face[2], face[5], face[8]]
-            ];
-        })
-    ].flat();
-
-    for (const condition of winConditions) {
-        if (condition[0] && condition[0] === condition[1] && condition[1] === condition[2]) {
-            setTimeout(() => alert(`${condition[0]} wins!`), 10);
-            resetGame();
-            return;
-        }
-    }
-
-    if (cubeState.flat().every(square => square)) {
-        setTimeout(() => alert("It's a draw!"), 10);
-        resetGame();
-    }
-}
-
-// Function to reset the game
-function resetGame() {
-    cubeState = [
-        ["", "", "", "", "", "", "", "", ""],
-        ["", "", "", "", "", "", "", "", ""],
-        ["", "", "", "", "", "", "", "", ""],
-        ["", "", "", "", "", "", "", "", ""],
-        ["", "", "", "", "", "", "", "", ""],
-        ["", "", "", "", "", "", "", "", ""]
-    ];
-    updateCube();
-    currentPlayer = 'X'; // Reset to player X
-}
-
-// Event listener for clicking on squares to place X or O
-const faces = cube.children;
-for (let i = 0; i < faces.length; i++) {
-    const squares = faces[i].children;
-    for (let j = 0; j < squares.length; j++) {
-        squares[j].addEventListener('click', () => {
-            if (!cubeState[i][j]) { // Check if the square is empty
-                cubeState[i][j] = currentPlayer; // Mark the square with current player's symbol
-                updateCube();
-                checkWin(); // Check for a win after the move
-                currentPlayer = currentPlayer === 'X' ? 'O' : 'X'; // Switch players
+                block.innerText = ''; // Clear index display
+                block.classList.remove('debug'); // Remove debug style
             }
         });
-    }
+    });
 }
+
+// Modify key event to activate only with Shift + X
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'X' && event.shiftKey) {
+        toggleDebug(true); // Enable debug mode when Shift + X is pressed
+    }
+});
+
+document.addEventListener('keyup', (event) => {
+    if (event.key === 'X' && event.shiftKey) {
+        toggleDebug(false); // Disable debug mode when Shift + X is released
+    }
+});
+
+function getRowLayers(rowIndex) {
+    const frontLayer = Array.from(document.querySelectorAll('.front .block')).slice(rowIndex * 3, rowIndex * 3 + 3);
+    const backLayer = Array.from(document.querySelectorAll('.back .block')).slice(rowIndex * 3, rowIndex * 3 + 3);
+    const leftLayer = Array.from(document.querySelectorAll('.left .block')).slice(rowIndex * 3, rowIndex * 3 + 3);
+    const rightLayer = Array.from(document.querySelectorAll('.right .block')).slice(rowIndex * 3, rowIndex * 3 + 3);
+    const topLayer = Array.from(document.querySelectorAll('.top .block')).slice(rowIndex * 3, rowIndex * 3 + 3);
+    const bottomLayer = Array.from(document.querySelectorAll('.bottom .block')).slice(rowIndex * 3, rowIndex * 3 + 3);
+    return { frontLayer, backLayer, leftLayer, rightLayer, topLayer, bottomLayer };
+}
+
+function getColumnLayers(colIndex) {
+    // Adjust the backLayer column index based on the specified rules
+    const adjustedBackColIndex = colIndex === 0 ? 2 : (colIndex === 2 ? 0 : colIndex);
+
+    const frontLayer = [
+        document.querySelector(`.front .block:nth-child(${colIndex + 1})`),
+        document.querySelector(`.front .block:nth-child(${colIndex + 4})`),
+        document.querySelector(`.front .block:nth-child(${colIndex + 7})`)
+    ];
+    
+    const backLayer = [
+        document.querySelector(`.back .block:nth-child(${adjustedBackColIndex + 1})`),
+        document.querySelector(`.back .block:nth-child(${adjustedBackColIndex + 4})`),
+        document.querySelector(`.back .block:nth-child(${adjustedBackColIndex + 7})`)
+    ];
+
+    const leftLayer = [
+        document.querySelector(`.left .block:nth-child(${colIndex + 1})`),
+        document.querySelector(`.left .block:nth-child(${colIndex + 4})`),
+        document.querySelector(`.left .block:nth-child(${colIndex + 7})`)
+    ];
+
+    const rightLayer = [
+        document.querySelector(`.right .block:nth-child(${colIndex + 1})`),
+        document.querySelector(`.right .block:nth-child(${colIndex + 4})`),
+        document.querySelector(`.right .block:nth-child(${colIndex + 7})`)
+    ];
+
+    const topLayer = [
+        document.querySelector(`.top .block:nth-child(${colIndex + 1})`),
+        document.querySelector(`.top .block:nth-child(${colIndex + 4})`),
+        document.querySelector(`.top .block:nth-child(${colIndex + 7})`)
+    ];
+
+    const bottomLayer = [
+        document.querySelector(`.bottom .block:nth-child(${colIndex + 1})`),
+        document.querySelector(`.bottom .block:nth-child(${colIndex + 4})`),
+        document.querySelector(`.bottom .block:nth-child(${colIndex + 7})`)
+    ];
+    
+    return { frontLayer, backLayer, leftLayer, rightLayer, topLayer, bottomLayer };
+}
+
+
+function updateBlockColors(layers) {
+  const colorMap = {
+        'R': 'red',
+        'O': 'orange',
+        'B': 'blue',
+        'G': 'green',
+        'Y': 'yellow',
+        'W': 'white'  // Add more colors as necessary
+    };
+
+    // Select all blocks across all faces of the cube
+    const allBlocks = document.querySelectorAll('.block');
+
+    // Update the color of each block based on its letter
+    allBlocks.forEach(block => {
+        const letter = block.innerText; // Get the letter
+        block.style.backgroundColor = colorMap[letter] || 'transparent'; // Set color
+    });
+}
+
+// Add a savedBackLayer to store the specific column state before twisting rows
+let savedBackLayer = [];
+
+// Function to save a specific column in the back layer
+function saveBackLayerColumn(columnIndex) {
+    savedBackLayer = []; // Clear previous saved values
+
+    // Save the specific column from the back layer
+    trueBackLayer = Array.from(document.querySelectorAll('.back .block'));
+    
+    // Store only the blocks in the specified column
+    for (let i = 0; i < 3; i++) {
+        savedBackLayer.push(trueBackLayer[i * 3 + columnIndex].innerText);
+    }
+
+    console.log("Saved Back Layer Column:", savedBackLayer);
+}
+
+// Function to restore the saved column back to the back layer
+function restoreBackLayerColumn(columnIndex) {
+    //TODO: The problem with this function is that it should use the opposite of it's columnindex for the outer ones, so 2 for 0 and vice versa. Otherwise this will just create more orange.
+    const trueBackLayer = Array.from(document.querySelectorAll('.back .block'));
+    console.log("Restoring Saved Back Layer:", trueBackLayer, savedBackLayer);
+
+    for (let i = 0; i < 3; i++) {
+        trueBackLayer[i * 3 + columnIndex].innerText = savedBackLayer[i]; //Savedbacklayerî] is one element while
+        console.log(savedBackLayer[i] , "POOPIE")
+        console.log( trueBackLayer[i * 3 + columnIndex].innerText, savedBackLayer[i],  )
+    }
+
+    console.log("Back Layer after restoration:", trueBackLayer.map(block => block.innerText));
+    
+}
+
+
+// Modify rotateLayers function to incorporate saving and restoring the column
+function rotateLayers(layers, type, columnIndex = null) {
+    
+    
+    let{ frontLayer, backLayer, leftLayer, rightLayer, topLayer, bottomLayer } = layers;
+
+    if (type === 'row') {
+        // Store current row state
+        const tempFront = frontLayer.map(block => block.innerText);
+        tempBack = backLayer.map(block => block.innerText);
+        const tempLeft = leftLayer.map(block => block.innerText);
+        const tempRight = rightLayer.map(block => block.innerText);
+
+        // Rotate the row (front <-> back, left <-> right)
+        frontLayer.forEach((block, index) => {
+            block.innerText = leftLayer[index].innerText;
+        });
+        leftLayer.forEach((block, index) => {
+            block.innerText = backLayer[index].innerText;
+        });
+        backLayer.forEach((block, index) => {
+            block.innerText = rightLayer[index].innerText;
+        });
+        rightLayer.forEach((block, index) => {
+            block.innerText = tempFront[index];
+        });
+    } else if (type === 'column') {
+        // Save the column from the back layer before rotating
+        saveBackLayerColumn(columnIndex);
+        
+
+        // Store current column state
+        const tempFront = frontLayer.map(block => block.innerText);
+        tempBack = backLayer.map(block => block.innerText); //TODO: Attempt to perform a check if this is the column 2 or 0 and then give the opposite column of it. tempBack seems to work decently it's just with the outer ones it gets confused.
+        const tempTop = topLayer.map(block => block.innerText);
+        const tempBottom = bottomLayer.map(block => block.innerText);
+        console.log("Pugaroonie", savedBackLayer, "EE",  backLayer, "AA", tempBack) //TODO: The problem is that tempback always is generated at first while the left face is OOO and thus gets copied like that.
+        
+        // Rotate the column (top <-> bottom, front <-> back)
+
+        frontLayer.forEach((block, index) => {
+            block.innerText = topLayer[index].innerText;
+        });
+
+        console.log("Back Layer MOPS:", backLayer.map(block => block.innerText));
+
+        backLayer.forEach((block, index) => {
+            block.innerText = bottomLayer[2 - index].innerText;
+        }); 
+
+        
+        console.log("Back Layer MOPS:", backLayer.map(block => block.innerText));
+        
+        console.log("Top Layer MOPS:", topLayer.map(block => block.innerText) + topLayer + tempBack);
+        console.log("THROW it back WAAAY before", backLayer, tempBack)
+       
+        console.log("Top Layer MOPS:", topLayer.map(block => block.innerText));
+
+        // Swap columns in trueBackLayer only if needed
+        if (columnIndex === 0 || columnIndex === 2) {
+            
+    
+            // Determine the opposite column: if 0, we want column 2; if 2, we want column 0
+            const oppositeColumnIndex = columnIndex === 0 ? 2 : (columnIndex === 2 ? 0 : columnIndex);
+        
+            // Filter the blocks to only include those in the opposite column
+            const oppositeColumnBlocks = tempBack.filter((_, index) => index % 3 === oppositeColumnIndex);
+        
+            // Log the selected blocks for debugging
+            console.log(`Opposite column ${oppositeColumnIndex} for columnIndex ${columnIndex}:`, oppositeColumnBlocks);
+                //swapColumns(columnIndex);
+                //restoreBackLayerColumn(columnIndex); // This will now trigger after 5 seconds
+                console.log("THROW it back before", backLayer);
+                backLayer = trueBackLayer;
+                console.log("THROW it back after", backLayer); // THIS backlayer never reads as orange, just list the full face here of the back and get the column you need, use that as the backLayer here.
+                topLayer.forEach((block, index) => {
+                    block.innerText = tempBack[2 - index]; //TODO: Right now this kind of works pretty well, it just clones whatever is in the back, but it always fixes itself, the true back color (ornage) seems to never show. I AM CLOSE
+                });
+        } else {
+            topLayer.forEach((block, index) => {
+                block.innerText = tempBack[2 - index]; //TODO: Now that I put tempback here the middle columns works perfectly, it's jsut the two others that need some finetuning, probably due to the swapping.
+            });
+        }
+
+        
+        
+
+        
+        //Sometimes this isn't properly updated, probably because of the way it works, the backlayer is already made and saved but then changes are made to it that probbaly aren't saved decently. fix that.
+
+        
+
+        
+
+       
+
+        
+
+        
+
+        bottomLayer.forEach((block, index) => {
+            block.innerText = tempFront[index];
+        });
+
+        // Restore the saved column in the back layer
+        
+    }
+
+    // Update the colors of the blocks after rotation
+    updateBlockColors(layers);
+}
+
+// The rest of your code remains the same.
+
+
+function swapColumns(columnIndex) {
+    // Get the true back layer to swap columns
+    trueBackLayer = Array.from(document.querySelectorAll('.back .block'));
+    console.log('True Back Layer:', trueBackLayer);
+    console.log(tempBack); // TODO: The first value of this returns undefined for some reason
+
+    // Log the current state of each block in the back layer
+    trueBackLayer.forEach((block, index) => {
+        console.log(`Block ${index} in trueBackLayer:`, block.innerText);
+    });
+
+    if (columnIndex === 0) { // Assign Column 1 (0, 3, 6) to Column 3 (2, 5, 8)
+        for (let i = 0; i < 3; i++) {
+            trueBackLayer[i * 3 + 2].innerText = trueBackLayer[i * 3].innerText; // Copy Column 1 to Column 3
+        }
+        
+    } else if (columnIndex === 2) { // Assign Column 3 (2, 5, 8) to Column 1 (0, 3, 6)
+        for (let i = 0; i < 3; i++) {
+            trueBackLayer[i * 3].innerText = trueBackLayer[i * 3 + 2].innerText; // Copy Column 3 to Column 1
+        }
+    }
+
+    // Log the new state of the back layer after swapping
+    trueBackLayer.forEach((block, index) => {
+        console.log(`Block ${index} after swapping:`, block.innerText);
+    });
+
+    // Redefine trueBackLayer to contain only the blocks in the specified column
+    let newColumnIndex = ""
+    if (columnIndex == 0) {
+        newColumnIndex = 2
+    } else {
+        if (columnIndex == 2) {
+            newColumnIndex = 0
+        }
+    }
+    trueBackLayer = trueBackLayer.filter((_, index) => index % 3 === newColumnIndex);
+
+    // Log the filtered trueBackLayer to verify it only contains the specified column blocks
+    console.log(`True Back Layer for column ${columnIndex}:`, trueBackLayer);
+}
+
+
+
+
+
+
