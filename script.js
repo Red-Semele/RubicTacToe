@@ -240,7 +240,7 @@ function rotateLayers(layers, type, columnIndex = null) {
         });
         console.log(columnIndex + "PUG")
         if (columnIndex == 2) {
-            rotateFace('bottom', 'counterclockwise');
+            rotateFace('bottom', 'clockwise');
             
             
         } else if (columnIndex == 0) {
@@ -283,7 +283,7 @@ function rotateLayers(layers, type, columnIndex = null) {
             
             
         } else if (columnIndex == 0) {
-                rotateFace('left', 'counterclockwise');
+                rotateFace('left', 'clockwise');
             }
     }
 
