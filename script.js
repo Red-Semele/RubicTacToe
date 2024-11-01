@@ -271,11 +271,12 @@ function rotateLayers(layers, type, columnIndex = null) {
         });
     }
 
-    // Update colors immediately for visual feedback
-    updateBlockColors();
+    // Check for a win immediately after rotating
+    
 
-    // Use a short timeout to allow the DOM to update before checking for a win
-    setTimeout(checkCubeWin, 50);
+    // Update the colors of the blocks after rotation
+    updateBlockColors(); // Call this function to apply the background colors
+    checkCubeWin();
 }
 
 // Ensure checkCubeWin is immediately effective
@@ -329,6 +330,112 @@ function initializeTicTacToe() {
         block.addEventListener('click', handleBlockClick);
     });
 }
+
+// Function to rotate the left column
+function rotateLeftColumn() {
+    const layers = getColumnLayers(0); // Get layers for the left column (index 0)
+    const { frontLayer, backLayer, topLayer, bottomLayer } = layers;
+
+    // Store current state of each layer
+    const tempFrontColors = frontLayer.map(block => block.getAttribute('data-color'));
+    const tempBackColors = backLayer.map(block => block.getAttribute('data-color'));
+    const tempTopColors = topLayer.map(block => block.getAttribute('data-color'));
+    const tempBottomColors = bottomLayer.map(block => block.getAttribute('data-color'));
+
+    const tempFrontText = frontLayer.map(block => block.innerText);
+    const tempBackText = backLayer.map(block => block.innerText);
+    const tempTopText = topLayer.map(block => block.innerText);
+    const tempBottomText = bottomLayer.map(block => block.innerText);
+
+    // Perform the rotation
+    frontLayer.forEach((block, index) => {
+        block.setAttribute('data-color', tempTopColors[index]);
+        block.innerText = tempTopText[index];
+    });
+
+    topLayer.forEach((block, index) => {
+        block.setAttribute('data-color', tempBackColors[2 - index]); // Reverse order for back
+        block.innerText = tempBackText[2 - index];
+    });
+
+    backLayer.forEach((block, index) => {
+        block.setAttribute('data-color', tempBottomColors[index]);
+        block.innerText = tempBottomText[index];
+    });
+
+    bottomLayer.forEach((block, index) => {
+        block.setAttribute('data-color', tempFrontColors[index]);
+        block.innerText = tempFrontText[index];
+    });
+
+    updateBlockColors();
+    checkCubeWin();
+}
+
+function rotateSColumn(columnIndex) {
+    // Calculate the opposite column index for the right face
+    const oppositeColumnIndex = 2 - columnIndex;
+
+    // Get all layers from the cube faces
+    const frontLayer = Array.from(document.querySelectorAll('.front .block'));
+    const backLayer = Array.from(document.querySelectorAll('.back .block'));
+    const leftLayer = Array.from(document.querySelectorAll('.left .block'));
+    const rightLayer = Array.from(document.querySelectorAll('.right .block'));
+    const topLayer = Array.from(document.querySelectorAll('.top .block'));
+    const bottomLayer = Array.from(document.querySelectorAll('.bottom .block'));
+
+    // Store the current state of each layer
+    const tempFrontColors = frontLayer.map(block => block.getAttribute('data-color'));
+    const tempBackColors = backLayer.map(block => block.getAttribute('data-color'));
+    const tempLeftColors = leftLayer.map(block => block.getAttribute('data-color'));
+    const tempRightColors = rightLayer.map(block => block.getAttribute('data-color'));
+    const tempTopColors = topLayer.map(block => block.getAttribute('data-color'));
+    const tempBottomColors = bottomLayer.map(block => block.getAttribute('data-color'));
+
+    const tempFrontText = frontLayer.map(block => block.innerText);
+    const tempBackText = backLayer.map(block => block.innerText);
+    const tempLeftText = leftLayer.map(block => block.innerText);
+    const tempRightText = rightLayer.map(block => block.innerText);
+    const tempTopText = topLayer.map(block => block.innerText);
+    const tempBottomText = bottomLayer.map(block => block.innerText);
+
+    // Perform the rotation based on the selected column index:
+    
+    // 1. Move the selected column of the left face to the corresponding row of the bottom face
+    for (let i = 0; i < 3; i++) {
+        bottomLayer[i].setAttribute('data-color', tempLeftColors[i * 3 + columnIndex]);
+        bottomLayer[i].innerText = tempLeftText[i * 3 + columnIndex];
+    }
+
+    // 2. Move the row from the bottom face to the opposite column of the right face in reverse order
+    for (let i = 0; i < 3; i++) {
+        rightLayer[i * 3 + oppositeColumnIndex].setAttribute('data-color', tempBottomColors[2 - i]);
+        rightLayer[i * 3 + oppositeColumnIndex].innerText = tempBottomText[2 - i];
+    }
+
+    // 3. Move the column from the right face to the row of the top face
+    for (let i = 0; i < 3; i++) {
+        topLayer[6 + i].setAttribute('data-color', tempRightColors[i * 3 + oppositeColumnIndex]);
+        topLayer[6 + i].innerText = tempRightText[i * 3 + oppositeColumnIndex];
+    }
+
+    // 4. Move the row from the top face to the selected column of the left face in reverse order
+    for (let i = 0; i < 3; i++) {
+        leftLayer[i * 3 + columnIndex].setAttribute('data-color', tempTopColors[8 - i]);
+        leftLayer[i * 3 + columnIndex].innerText = tempTopText[8 - i];
+    }
+
+    // Update colors of blocks
+    updateBlockColors();
+    checkCubeWin();
+}
+
+
+
+
+// Event listeners for the new buttons
+
+
 
 // Start the Tic-Tac-Toe game
 initializeTicTacToe();
