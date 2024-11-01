@@ -40,7 +40,8 @@ document.addEventListener('keyup', (event) => {
 
 function rotateRow(rowIndex) {
     const layers = getRowLayers(rowIndex);
-    rotateLayers(layers, 'row');
+    console.log("Pug" + rowIndex)
+    rotateLayers(layers, 'row', rowIndex);
 }
 
 function rotateColumn(colIndex) {
@@ -237,6 +238,14 @@ function rotateLayers(layers, type, columnIndex = null) {
             block.setAttribute('data-color', tempFrontColors[index]); // Set right color to front
             block.innerText = tempFrontText[index]; // Set right text to front text
         });
+        console.log(columnIndex + "PUG")
+        if (columnIndex == 2) {
+            rotateFace('bottom', 'counterclockwise');
+            
+            
+        } else if (columnIndex == 0) {
+                rotateFace('top', 'clockwise');
+            }
     } else if (type === 'column') {
         // Store current column state for data-color and inner text
         const tempFrontColors = frontLayer.map(block => block.getAttribute('data-color'));
@@ -269,7 +278,16 @@ function rotateLayers(layers, type, columnIndex = null) {
             block.setAttribute('data-color', tempFrontColors[index]); // Set bottom color to front
             block.innerText = tempFrontText[index]; // Set bottom text to front text
         });
+        if (columnIndex == 2) {
+            rotateFace('right', 'counterclockwise');
+            
+            
+        } else if (columnIndex == 0) {
+                rotateFace('left', 'counterclockwise');
+            }
     }
+
+   
 
     // Check for a win immediately after rotating
     
@@ -427,6 +445,15 @@ function rotateSColumn(columnIndex) {
 
     // Update colors of blocks
     updateBlockColors();
+    if (columnIndex == 2) {
+        rotateFace('front', 'counterclockwise');
+        
+        
+    } else if (columnIndex == 0) {
+            rotateFace('back', 'clockwise');
+        }
+
+    
     checkCubeWin();
 }
 
@@ -440,6 +467,77 @@ function rotateSColumn(columnIndex) {
 
 // Start the Tic-Tac-Toe game
 initializeTicTacToe();
+
+
+function rotateFace(face, direction) {
+    // Get the blocks of the specified face
+    const blocks = Array.from(document.querySelectorAll(`.${face} .block`));
+    
+    // Ensure we have exactly 9 blocks
+    if (blocks.length !== 9) {
+        console.error('Expected exactly 9 blocks for a face.');
+        return;
+    }
+
+    // Create an array to hold the current colors/text
+    const currentColors = blocks.map(block => block.getAttribute('data-color'));
+    const currentTexts = blocks.map(block => block.innerText);
+
+    // Rotate colors and texts based on the direction
+    if (direction === 'clockwise') {
+        blocks[0].setAttribute('data-color', currentColors[6]); // 0 -> 6
+        blocks[1].setAttribute('data-color', currentColors[3]); // 1 -> 3
+        blocks[2].setAttribute('data-color', currentColors[0]); // 2 -> 0
+        blocks[3].setAttribute('data-color', currentColors[7]); // 3 -> 7
+        blocks[4].setAttribute('data-color', currentColors[4]); // 4 stays the same
+        blocks[5].setAttribute('data-color', currentColors[1]); // 5 -> 1
+        blocks[6].setAttribute('data-color', currentColors[8]); // 6 -> 8
+        blocks[7].setAttribute('data-color', currentColors[5]); // 7 -> 5
+        blocks[8].setAttribute('data-color', currentColors[2]); // 8 -> 2
+
+        // Update texts accordingly
+        blocks[0].innerText = currentTexts[6]; // 0 -> 6
+        blocks[1].innerText = currentTexts[3]; // 1 -> 3
+        blocks[2].innerText = currentTexts[0]; // 2 -> 0
+        blocks[3].innerText = currentTexts[7]; // 3 -> 7
+        blocks[4].innerText = currentTexts[4]; // 4 stays the same
+        blocks[5].innerText = currentTexts[1]; // 5 -> 1
+        blocks[6].innerText = currentTexts[8]; // 6 -> 8
+        blocks[7].innerText = currentTexts[5]; // 7 -> 5
+        blocks[8].innerText = currentTexts[2]; // 8 -> 2
+
+    } else if (direction === 'counterclockwise') {
+        blocks[0].setAttribute('data-color', currentColors[2]); // 0 -> 2
+        blocks[1].setAttribute('data-color', currentColors[5]); // 1 -> 5
+        blocks[2].setAttribute('data-color', currentColors[8]); // 2 -> 8
+        blocks[3].setAttribute('data-color', currentColors[1]); // 3 -> 1
+        blocks[4].setAttribute('data-color', currentColors[4]); // 4 stays the same
+        blocks[5].setAttribute('data-color', currentColors[7]); // 5 -> 3
+        blocks[6].setAttribute('data-color', currentColors[0]); // 6 -> 0
+        blocks[7].setAttribute('data-color', currentColors[3]); // 7 stays the same
+        blocks[8].setAttribute('data-color', currentColors[6]); // 8 -> 6
+
+        // Update texts accordingly
+        blocks[0].innerText = currentTexts[2]; // 0 -> 2
+        blocks[1].innerText = currentTexts[5]; // 1 -> 5
+        blocks[2].innerText = currentTexts[8]; // 2 -> 8
+        blocks[3].innerText = currentTexts[1]; // 3 -> 1
+        blocks[4].innerText = currentTexts[4]; // 4 stays the same
+        blocks[5].innerText = currentTexts[7]; // 5 -> 3
+        blocks[6].innerText = currentTexts[0]; // 6 -> 0
+        blocks[7].innerText = currentTexts[3]; // 7 stays the same
+        blocks[8].innerText = currentTexts[6]; // 8 -> 6
+    } else {
+        console.error('Invalid direction. Use "clockwise" or "counterclockwise".');
+        return;
+    }
+
+    // Update colors of blocks (if you have a function for this)
+    updateBlockColors();
+
+    // Check if the cube is in a winning state (if you have a function for this)
+    checkCubeWin();
+}
 
 
 
