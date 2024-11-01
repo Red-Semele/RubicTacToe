@@ -403,32 +403,33 @@ function rotateSColumn(columnIndex) {
     
     // 1. Move the selected column of the left face to the corresponding row of the bottom face
     for (let i = 0; i < 3; i++) {
-        bottomLayer[i].setAttribute('data-color', tempLeftColors[i * 3 + columnIndex]);
-        bottomLayer[i].innerText = tempLeftText[i * 3 + columnIndex];
+        bottomLayer[oppositeColumnIndex * 3 + i].setAttribute('data-color', tempLeftColors[i * 3 + columnIndex]);
+        bottomLayer[oppositeColumnIndex * 3 + i].innerText = tempLeftText[i * 3 + columnIndex];
     }
 
     // 2. Move the row from the bottom face to the opposite column of the right face in reverse order
     for (let i = 0; i < 3; i++) {
-        rightLayer[i * 3 + oppositeColumnIndex].setAttribute('data-color', tempBottomColors[2 - i]);
-        rightLayer[i * 3 + oppositeColumnIndex].innerText = tempBottomText[2 - i];
+        rightLayer[i * 3 + oppositeColumnIndex].setAttribute('data-color', tempBottomColors[oppositeColumnIndex * 3 + (2 - i)]);
+        rightLayer[i * 3 + oppositeColumnIndex].innerText = tempBottomText[oppositeColumnIndex * 3 + (2 - i)];
     }
 
     // 3. Move the column from the right face to the row of the top face
     for (let i = 0; i < 3; i++) {
-        topLayer[6 + i].setAttribute('data-color', tempRightColors[i * 3 + oppositeColumnIndex]);
-        topLayer[6 + i].innerText = tempRightText[i * 3 + oppositeColumnIndex];
+        topLayer[columnIndex * 3 + i].setAttribute('data-color', tempRightColors[i * 3 + oppositeColumnIndex]);
+        topLayer[oppositeColumnIndex * 3 + i].innerText = tempRightText[i * 3 + oppositeColumnIndex];
     }
 
-    // 4. Move the row from the top face to the selected column of the left face in reverse order
-    for (let i = 0; i < 3; i++) {
-        leftLayer[i * 3 + columnIndex].setAttribute('data-color', tempTopColors[8 - i]);
-        leftLayer[i * 3 + columnIndex].innerText = tempTopText[8 - i];
-    }
+   // 4. Move the row from the top face to the selected column of the left face in reverse order
+   for (let i = 0; i < 3; i++) {
+    leftLayer[i * 3 + columnIndex].setAttribute('data-color', tempTopColors[columnIndex * 3 + (2 - i)]);
+    leftLayer[i * 3 + columnIndex].innerText = tempTopText[columnIndex * 3 + (2 - i)];
+}
 
     // Update colors of blocks
     updateBlockColors();
     checkCubeWin();
 }
+
 
 
 
