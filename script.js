@@ -172,21 +172,7 @@ function saveBackLayerColumn(columnIndex) {
     console.log("Saved Back Layer Column:", savedBackLayer);
 }
 
-// Function to restore the saved column back to the back layer
-function restoreBackLayerColumn(columnIndex) {
-    //TODO: The problem with this function is that it should use the opposite of it's columnindex for the outer ones, so 2 for 0 and vice versa. Otherwise this will just create more orange.
-    const trueBackLayer = Array.from(document.querySelectorAll('.back .block'));
-    console.log("Restoring Saved Back Layer:", trueBackLayer, savedBackLayer);
 
-    for (let i = 0; i < 3; i++) {
-        trueBackLayer[i * 3 + columnIndex].innerText = savedBackLayer[i]; //Savedbacklayerî] is one element while
-        console.log(savedBackLayer[i] , "POOPIE")
-        console.log( trueBackLayer[i * 3 + columnIndex].innerText, savedBackLayer[i],  )
-    }
-
-    console.log("Back Layer after restoration:", trueBackLayer.map(block => block.innerText));
-    
-}
 
 
 // Modify rotateLayers function to incorporate saving and restoring the column
@@ -222,10 +208,10 @@ function rotateLayers(layers, type, columnIndex = null) {
 
         // Store current column state
         const tempFront = frontLayer.map(block => block.innerText);
-        tempBack = backLayer.map(block => block.innerText); //TODO: Attempt to perform a check if this is the column 2 or 0 and then give the opposite column of it. tempBack seems to work decently it's just with the outer ones it gets confused.
+        tempBack = backLayer.map(block => block.innerText); 
         const tempTop = topLayer.map(block => block.innerText);
         const tempBottom = bottomLayer.map(block => block.innerText);
-        console.log("Pugaroonie", savedBackLayer, "EE",  backLayer, "AA", tempBack) //TODO: The problem is that tempback always is generated at first while the left face is OOO and thus gets copied like that.
+        console.log("Pugaroonie", savedBackLayer, "EE",  backLayer, "AA", tempBack) 
         
         // Rotate the column (top <-> bottom, front <-> back)
 
@@ -259,35 +245,20 @@ function rotateLayers(layers, type, columnIndex = null) {
         
             // Log the selected blocks for debugging
             console.log(`Opposite column ${oppositeColumnIndex} for columnIndex ${columnIndex}:`, oppositeColumnBlocks);
-                //swapColumns(columnIndex);
-                //restoreBackLayerColumn(columnIndex); // This will now trigger after 5 seconds
+               
+               
                 console.log("THROW it back before", backLayer);
                 backLayer = trueBackLayer;
-                console.log("THROW it back after", backLayer); // THIS backlayer never reads as orange, just list the full face here of the back and get the column you need, use that as the backLayer here.
+                console.log("THROW it back after", backLayer); 
                 topLayer.forEach((block, index) => {
-                    block.innerText = tempBack[2 - index]; //TODO: Right now this kind of works pretty well, it just clones whatever is in the back, but it always fixes itself, the true back color (ornage) seems to never show. I AM CLOSE
+                    block.innerText = tempBack[2 - index]; 
                 });
         } else {
             topLayer.forEach((block, index) => {
-                block.innerText = tempBack[2 - index]; //TODO: Now that I put tempback here the middle columns works perfectly, it's jsut the two others that need some finetuning, probably due to the swapping.
+                block.innerText = tempBack[2 - index]; 
             });
         }
 
-        
-        
-
-        
-        //Sometimes this isn't properly updated, probably because of the way it works, the backlayer is already made and saved but then changes are made to it that probbaly aren't saved decently. fix that.
-
-        
-
-        
-
-       
-
-        
-
-        
 
         bottomLayer.forEach((block, index) => {
             block.innerText = tempFront[index];
@@ -304,47 +275,7 @@ function rotateLayers(layers, type, columnIndex = null) {
 // The rest of your code remains the same.
 
 
-function swapColumns(columnIndex) {
-    // Get the true back layer to swap columns
-    trueBackLayer = Array.from(document.querySelectorAll('.back .block'));
-    console.log('True Back Layer:', trueBackLayer);
-    console.log(tempBack); // TODO: The first value of this returns undefined for some reason
 
-    // Log the current state of each block in the back layer
-    trueBackLayer.forEach((block, index) => {
-        console.log(`Block ${index} in trueBackLayer:`, block.innerText);
-    });
-
-    if (columnIndex === 0) { // Assign Column 1 (0, 3, 6) to Column 3 (2, 5, 8)
-        for (let i = 0; i < 3; i++) {
-            trueBackLayer[i * 3 + 2].innerText = trueBackLayer[i * 3].innerText; // Copy Column 1 to Column 3
-        }
-        
-    } else if (columnIndex === 2) { // Assign Column 3 (2, 5, 8) to Column 1 (0, 3, 6)
-        for (let i = 0; i < 3; i++) {
-            trueBackLayer[i * 3].innerText = trueBackLayer[i * 3 + 2].innerText; // Copy Column 3 to Column 1
-        }
-    }
-
-    // Log the new state of the back layer after swapping
-    trueBackLayer.forEach((block, index) => {
-        console.log(`Block ${index} after swapping:`, block.innerText);
-    });
-
-    // Redefine trueBackLayer to contain only the blocks in the specified column
-    let newColumnIndex = ""
-    if (columnIndex == 0) {
-        newColumnIndex = 2
-    } else {
-        if (columnIndex == 2) {
-            newColumnIndex = 0
-        }
-    }
-    trueBackLayer = trueBackLayer.filter((_, index) => index % 3 === newColumnIndex);
-
-    // Log the filtered trueBackLayer to verify it only contains the specified column blocks
-    console.log(`True Back Layer for column ${columnIndex}:`, trueBackLayer);
-}
 
 
 
