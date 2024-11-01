@@ -134,8 +134,8 @@ function getColumnLayers(colIndex) {
 }
 
 
-function updateBlockColors(layers) {
-  const colorMap = {
+function updateBlockColors() {
+    const colorMap = {
         'R': 'red',
         'O': 'orange',
         'B': 'blue',
@@ -147,12 +147,13 @@ function updateBlockColors(layers) {
     // Select all blocks across all faces of the cube
     const allBlocks = document.querySelectorAll('.block');
 
-    // Update the color of each block based on its letter
+    // Update the color of each block based on its data-color attribute
     allBlocks.forEach(block => {
-        const letter = block.innerText; // Get the letter
-        block.style.backgroundColor = colorMap[letter] || 'transparent'; // Set color
+        const colorLetter = block.getAttribute('data-color'); // Get the color letter from data attribute
+        block.style.backgroundColor = colorMap[colorLetter] || 'transparent'; // Set color
     });
 }
+
 
 // Add a savedBackLayer to store the specific column state before twisting rows
 let savedBackLayer = [];
@@ -175,104 +176,162 @@ function saveBackLayerColumn(columnIndex) {
 
 
 
-// Modify rotateLayers function to incorporate saving and restoring the column
+
+
+// Variable to keep track of the current player ("X" or "O")
+let currentPlayer = "X";
+const winningCombinations = [
+    [0, 1, 2], // Top row
+    [3, 4, 5], // Middle row
+    [6, 7, 8], // Bottom row
+    [0, 3, 6], // Left column
+    [1, 4, 7], // Middle column
+    [2, 5, 8], // Right column
+    [0, 4, 8], // Diagonal from top-left to bottom-right
+    [2, 4, 6]  // Diagonal from top-right to bottom-left
+];
+
+// Function to check for a win on a given face
+function checkWin(faceBlocks) {
+    for (let combination of winningCombinations) {
+        const [a, b, c] = combination;
+        // Check if all three blocks in the combination have the same non-empty value
+        if (faceBlocks[a].innerText &&
+            faceBlocks[a].innerText === faceBlocks[b].innerText &&
+            faceBlocks[a].innerText === faceBlocks[c].innerText) {
+            return faceBlocks[a].innerText; // Return the winning symbol ("X" or "O")
+        }
+    }
+    return null; // No win found on this face
+}
+
 function rotateLayers(layers, type, columnIndex = null) {
-    
-    
-    let{ frontLayer, backLayer, leftLayer, rightLayer, topLayer, bottomLayer } = layers;
+    let { frontLayer, backLayer, leftLayer, rightLayer, topLayer, bottomLayer } = layers;
 
     if (type === 'row') {
-        // Store current row state
-        const tempFront = frontLayer.map(block => block.innerText);
-        tempBack = backLayer.map(block => block.innerText);
-        const tempLeft = leftLayer.map(block => block.innerText);
-        const tempRight = rightLayer.map(block => block.innerText);
+        // Store current row state for data-color and inner text
+        const tempFrontColors = frontLayer.map(block => block.getAttribute('data-color'));
+        const tempBackColors = backLayer.map(block => block.getAttribute('data-color'));
+        const tempLeftColors = leftLayer.map(block => block.getAttribute('data-color'));
+        const tempRightColors = rightLayer.map(block => block.getAttribute('data-color'));
+
+        const tempFrontText = frontLayer.map(block => block.innerText);
+        const tempBackText = backLayer.map(block => block.innerText);
+        const tempLeftText = leftLayer.map(block => block.innerText);
+        const tempRightText = rightLayer.map(block => block.innerText);
 
         // Rotate the row (front <-> back, left <-> right)
         frontLayer.forEach((block, index) => {
-            block.innerText = leftLayer[index].innerText;
+            block.setAttribute('data-color', tempLeftColors[index]); // Set front color to left
+            block.innerText = tempLeftText[index]; // Set front text to left text
         });
         leftLayer.forEach((block, index) => {
-            block.innerText = backLayer[index].innerText;
+            block.setAttribute('data-color', tempBackColors[index]); // Set left color to back
+            block.innerText = tempBackText[index]; // Set left text to back text
         });
         backLayer.forEach((block, index) => {
-            block.innerText = rightLayer[index].innerText;
+            block.setAttribute('data-color', tempRightColors[index]); // Set back color to right
+            block.innerText = tempRightText[index]; // Set back text to right text
         });
         rightLayer.forEach((block, index) => {
-            block.innerText = tempFront[index];
+            block.setAttribute('data-color', tempFrontColors[index]); // Set right color to front
+            block.innerText = tempFrontText[index]; // Set right text to front text
         });
     } else if (type === 'column') {
-        // Save the column from the back layer before rotating
-        saveBackLayerColumn(columnIndex);
-        
+        // Store current column state for data-color and inner text
+        const tempFrontColors = frontLayer.map(block => block.getAttribute('data-color'));
+        const tempBackColors = backLayer.map(block => block.getAttribute('data-color'));
+        const tempTopColors = topLayer.map(block => block.getAttribute('data-color'));
+        const tempBottomColors = bottomLayer.map(block => block.getAttribute('data-color'));
 
-        // Store current column state
-        const tempFront = frontLayer.map(block => block.innerText);
-        tempBack = backLayer.map(block => block.innerText); 
-        const tempTop = topLayer.map(block => block.innerText);
-        const tempBottom = bottomLayer.map(block => block.innerText);
-        console.log("Pugaroonie", savedBackLayer, "EE",  backLayer, "AA", tempBack) 
-        
+        const tempFrontText = frontLayer.map(block => block.innerText);
+        const tempBackText = backLayer.map(block => block.innerText);
+        const tempTopText = topLayer.map(block => block.innerText);
+        const tempBottomText = bottomLayer.map(block => block.innerText);
+
         // Rotate the column (top <-> bottom, front <-> back)
-
         frontLayer.forEach((block, index) => {
-            block.innerText = topLayer[index].innerText;
+            block.setAttribute('data-color', tempTopColors[index]); // Set front color to top
+            block.innerText = tempTopText[index]; // Set front text to top text
         });
-
-        console.log("Back Layer MOPS:", backLayer.map(block => block.innerText));
 
         backLayer.forEach((block, index) => {
-            block.innerText = bottomLayer[2 - index].innerText;
-        }); 
-
-        
-        console.log("Back Layer MOPS:", backLayer.map(block => block.innerText));
-        
-        console.log("Top Layer MOPS:", topLayer.map(block => block.innerText) + topLayer + tempBack);
-        console.log("THROW it back WAAAY before", backLayer, tempBack)
-       
-        console.log("Top Layer MOPS:", topLayer.map(block => block.innerText));
-
-        // Swap columns in trueBackLayer only if needed
-        if (columnIndex === 0 || columnIndex === 2) {
-            
-    
-            // Determine the opposite column: if 0, we want column 2; if 2, we want column 0
-            const oppositeColumnIndex = columnIndex === 0 ? 2 : (columnIndex === 2 ? 0 : columnIndex);
-        
-            // Filter the blocks to only include those in the opposite column
-            const oppositeColumnBlocks = tempBack.filter((_, index) => index % 3 === oppositeColumnIndex);
-        
-            // Log the selected blocks for debugging
-            console.log(`Opposite column ${oppositeColumnIndex} for columnIndex ${columnIndex}:`, oppositeColumnBlocks);
-               
-               
-                console.log("THROW it back before", backLayer);
-                backLayer = trueBackLayer;
-                console.log("THROW it back after", backLayer); 
-                topLayer.forEach((block, index) => {
-                    block.innerText = tempBack[2 - index]; 
-                });
-        } else {
-            topLayer.forEach((block, index) => {
-                block.innerText = tempBack[2 - index]; 
-            });
-        }
-
-
-        bottomLayer.forEach((block, index) => {
-            block.innerText = tempFront[index];
+            block.setAttribute('data-color', tempBottomColors[2 - index]); // Set back color to bottom
+            block.innerText = tempBottomText[2 - index]; // Set back text to bottom text
         });
 
-        // Restore the saved column in the back layer
-        
+        topLayer.forEach((block, index) => {
+            block.setAttribute('data-color', tempBackColors[2 - index]); // Set top color to back
+            block.innerText = tempBackText[2 - index]; // Set top text to back text
+        });
+
+        bottomLayer.forEach((block, index) => {
+            block.setAttribute('data-color', tempFrontColors[index]); // Set bottom color to front
+            block.innerText = tempFrontText[index]; // Set bottom text to front text
+        });
     }
 
-    // Update the colors of the blocks after rotation
-    updateBlockColors(layers);
+    // Update colors immediately for visual feedback
+    updateBlockColors();
+
+    // Use a short timeout to allow the DOM to update before checking for a win
+    setTimeout(checkCubeWin, 50);
 }
 
-// The rest of your code remains the same.
+// Ensure checkCubeWin is immediately effective
+function checkCubeWin() {
+    const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+    
+    for (let face of faces) {
+        // Get all blocks in the current face
+        const faceBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
+        
+        // Check for a win on this face
+        const winner = checkWin(faceBlocks);
+        
+        if (winner) {
+            alert(`${winner} wins on the ${face} face!`);
+            resetGame(); // Optional: reset the game after a win
+            return; // Exit once a win is found
+        }
+    }
+}
+
+
+// Reset function to clear the game board
+function resetGame() {
+    const allBlocks = document.querySelectorAll('.block');
+    allBlocks.forEach(block => {
+        block.innerText = ''; // Clear inner text
+        block.setAttribute('data-color', ''); // Clear color if needed
+    });
+    currentPlayer = "X"; // Reset to starting player
+}
+
+// Update handleBlockClick to include win check
+function handleBlockClick(event) {
+    const block = event.target;
+
+    // Only set the text if the block is empty
+    if (!block.innerText) {
+        block.innerText = currentPlayer; // Set current player's symbol
+        currentPlayer = currentPlayer === "X" ? "O" : "X"; // Switch to the other player
+        
+        // Check for a win after each move
+        checkCubeWin();
+    }
+}
+
+// Initialize Tic-Tac-Toe with win-check functionality
+function initializeTicTacToe() {
+    const allBlocks = document.querySelectorAll('.block');
+    allBlocks.forEach(block => {
+        block.addEventListener('click', handleBlockClick);
+    });
+}
+
+// Start the Tic-Tac-Toe game
+initializeTicTacToe();
 
 
 
