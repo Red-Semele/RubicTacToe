@@ -3,6 +3,9 @@ let rotationX = 0; // Initial rotation on X-axis
 let rotationY = 0; // Initial rotation on Y-axis
 let tempBack = ""
 let trueBackLayer = ""
+let currentPlayer = "X";
+let xTotalWins = 0; // Total wins for player X
+let oTotalWins = 0; // Total wins for player O
 
 const faceColors = {
     front: 'red',
@@ -284,8 +287,6 @@ function rotateLayers(layers, type, columnIndex = null) {
 
 // Variable to keep track of the current player ("X" or "O")
 
-let xTotalWins = 0; // Total wins for player X
-let oTotalWins = 0; // Total wins for player O
 
 const winningCombinations = [
     [0, 1, 2], // Top row
@@ -408,8 +409,6 @@ function resetGame() {
     currentPlayer = "X"; // Reset to starting player
 
     // Reset scoreboard display
-    document.getElementById('xWins').innerText = 'X Wins: 0';
-    document.getElementById('oWins').innerText = 'O Wins: 0';
 }
 
 
@@ -610,7 +609,8 @@ function rotateFace(face, direction) {
     updateBlockColors();
 
 }
-
+let startBlock = null;      // Store the block where the drag starts
+let startX = 0, startY = 0; // Store the initial coordinates of mousedown
 
 function getRowOrColumn(blockId, direction) {
     const face = blockId[0];                  // Get the face letter from the first character of the ID
@@ -795,38 +795,27 @@ function mirrorRowOrColumn(or) {
     }
 }
 
-let startBlock = null;
-let startX = 0;
-let startY = 0;
-let currentPlayer = "X"; // Track the current player
-
-// Handle mousedown or touchstart to capture start position and coordinates
-function handleBlockStart(event) {
+// Handle mousedown to capture start position and coordinates
+function handleBlockMouseDown(event) {
     event.preventDefault(); // Prevent default drag behavior
-
-    const isTouch = event.type === "touchstart";
-    const eventInfo = isTouch ? event.touches[0] : event;
-
-    startBlock = event.target;    // Set the start block where start occurred
-    startX = eventInfo.clientX;   // Capture the initial X coordinate
-    startY = eventInfo.clientY;   // Capture the initial Y coordinate
-    console.log("Interaction started on:", startBlock.id, "at coordinates:", startX, startY);
+    startBlock = event.target;    // Set the start block where mousedown occurred
+    startX = event.clientX;       // Capture the initial X coordinate
+    startY = event.clientY;       // Capture the initial Y coordinate
+    console.log("Drag started on:", startBlock.id, "at coordinates:", startX, startY);
 }
 
-// Handle mouseup or touchend to detect if the swipe finished on a different block and direction
-function handleBlockEnd(event) {
-    const isTouch = event.type === "touchend";
-    const eventInfo = isTouch ? event.changedTouches[0] : event;
-    
-    const endBlock = document.elementFromPoint(eventInfo.clientX, eventInfo.clientY); // Get block where end occurred
+// Handle mouseup to detect if the drag finished on a different block and direction
+function handleBlockMouseUp(event) {
+    const endBlock = event.target; // Get the block where mouseup occurred
+    console.log("End: " + endBlock.id);
 
     // If start and end block are the same, treat as a click
     if (startBlock === endBlock) {
         handleBlockClick(event); // Call the click handler
     } else {
         // Extract block numbers from IDs
-        const startBlockNumber = parseInt(startBlock.id[1]);
-        const endBlockNumber = parseInt(endBlock.id[1]);
+        const startBlockNumber = parseInt(startBlock.id[1]); // Get the block number from the start block
+        const endBlockNumber = parseInt(endBlock.id[1]);     // Get the block number from the end block
 
         // Determine the direction of the swipe based on block numbers
         const rowStart = Math.floor(startBlockNumber / 3);
@@ -874,17 +863,13 @@ function handleBlockClick(event) {
     }
 }
 
-// Add event listeners for both mouse and touch events on each block
+// Event listeners for each block
 document.querySelectorAll('.block').forEach(block => {
-    // Mouse events
-    block.addEventListener('mousedown', handleBlockStart);
-    block.addEventListener('mouseup', handleBlockEnd);
-
-    // Touch events
-    block.addEventListener('touchstart', handleBlockStart);
-    block.addEventListener('touchend', handleBlockEnd);
+    block.addEventListener('mousedown', handleBlockMouseDown); // Track the starting block
+    block.addEventListener('mouseup', handleBlockMouseUp); // Check if drag ended on the same block
+    block.addEventListener('touchstart', handleBlockMouseDown); // Track the starting block for touch
+    block.addEventListener('touchend', handleBlockMouseUp); // Check if drag ended on the same block for touch
 });
-
 
 
 
