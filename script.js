@@ -1,6 +1,6 @@
 const cube = document.getElementById('cube');
-let rotationX = 30; // Initial rotation on X-axis
-let rotationY = 30; // Initial rotation on Y-axis
+let rotationX = 0; // Initial rotation on X-axis
+let rotationY = 0; // Initial rotation on Y-axis
 let tempBack = ""
 let trueBackLayer = ""
 

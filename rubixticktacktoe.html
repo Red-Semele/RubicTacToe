@@ -22,8 +22,9 @@
             width: 300px;
             height: 300px;
             transform-style: preserve-3d;
-            transform: rotateX(30deg) rotateY(30deg);
+            transform: rotateX(0deg) rotateY(0deg); /* Adjusted to face the front */
             transition: transform 0.5s; /* Transition effect for rotation */
+            margin-top: 70px; /* Adjust this value for more/less space */
         }
 
         .face {
@@ -69,7 +70,7 @@
     </style>
 </head>
 <body>
-    <h1>3D Interactive Rubik's Cube</h1>
+    <h1>Rubic tac toe</h1>
     <div id="cube">
         <div class="face front">
             <div class="block" id="f0" data-color="R"></div>
@@ -139,26 +140,7 @@
         </div>
     </div>
     
-    <div id="controls">
-        <h2>Controls</h2>
-        <div class="row">
-            <button onclick="rotateRow(0)">Rotate Row 1</button>
-            <button onclick="rotateRow(1)">Rotate Row 2</button>
-            <button onclick="rotateRow(2)">Rotate Row 3</button>
-        </div>
-        <div class="column">
-            <button onclick="rotateColumn(0)">Rotate Column 1</button>
-            <button onclick="rotateColumn(1)">Rotate Column 2</button>
-            <button onclick="rotateColumn(2)">Rotate Column 3</button>
-        </div>
-
-        <div>
-            <button onclick="rotateSColumn(0)">Rotate Column L1</button>
-            <button onclick="rotateSColumn(1)">Rotate Column L2</button>
-            <button onclick="rotateSColumn(2)">Rotate Column L3</button>
-        </div>
-        
-    </div>
+   
 
     <script src="script.js"></script>
    
