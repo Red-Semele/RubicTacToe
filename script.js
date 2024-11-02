@@ -4,6 +4,15 @@ let rotationY = 0; // Initial rotation on Y-axis
 let tempBack = ""
 let trueBackLayer = ""
 
+const faceColors = {
+    front: 'red',
+    back: 'blue',
+    left: 'green',
+    right: 'yellow',
+    top: 'orange',
+    bottom: 'purple'
+};
+
 // Function to rotate the entire cube with arrow keys
 function rotateCube(deltaX, deltaY) {
     rotationX += deltaX;
@@ -180,32 +189,7 @@ function saveBackLayerColumn(columnIndex) {
 
 
 
-// Variable to keep track of the current player ("X" or "O")
-let currentPlayer = "X";
-const winningCombinations = [
-    [0, 1, 2], // Top row
-    [3, 4, 5], // Middle row
-    [6, 7, 8], // Bottom row
-    [0, 3, 6], // Left column
-    [1, 4, 7], // Middle column
-    [2, 5, 8], // Right column
-    [0, 4, 8], // Diagonal from top-left to bottom-right
-    [2, 4, 6]  // Diagonal from top-right to bottom-left
-];
 
-// Function to check for a win on a given face
-function checkWin(faceBlocks) {
-    for (let combination of winningCombinations) {
-        const [a, b, c] = combination;
-        // Check if all three blocks in the combination have the same non-empty value
-        if (faceBlocks[a].innerText &&
-            faceBlocks[a].innerText === faceBlocks[b].innerText &&
-            faceBlocks[a].innerText === faceBlocks[c].innerText) {
-            return faceBlocks[a].innerText; // Return the winning symbol ("X" or "O")
-        }
-    }
-    return null; // No win found on this face
-}
 
 function rotateLayers(layers, type, columnIndex = null) {
     let { frontLayer, backLayer, leftLayer, rightLayer, topLayer, bottomLayer } = layers;
@@ -295,42 +279,141 @@ function rotateLayers(layers, type, columnIndex = null) {
 
     // Update the colors of the blocks after rotation
     updateBlockColors(); // Call this function to apply the background colors
-    checkCubeWin();
+    
 }
 
-// Ensure checkCubeWin is immediately effective
+// Variable to keep track of the current player ("X" or "O")
+let currentPlayer = "X";
+let xTotalWins = 0; // Total wins for player X
+let oTotalWins = 0; // Total wins for player O
+
+const winningCombinations = [
+    [0, 1, 2], // Top row
+    [3, 4, 5], // Middle row
+    [6, 7, 8], // Bottom row
+    [0, 3, 6], // Left column
+    [1, 4, 7], // Middle column
+    [2, 5, 8], // Right column
+    [0, 4, 8], // Diagonal from top-left to bottom-right
+    [2, 4, 6]  // Diagonal from top-right to bottom-left
+];
+
+// Function to check for wins on a given face
+function checkWin(faceBlocks) {
+    const winners = [];
+    for (let combination of winningCombinations) {
+        const [a, b, c] = combination;
+        // Check if all three blocks in the combination have the same non-empty value
+        if (faceBlocks[a].innerText &&
+            faceBlocks[a].innerText === faceBlocks[b].innerText &&
+            faceBlocks[a].innerText === faceBlocks[c].innerText) {
+            winners.push(faceBlocks[a].innerText); // Store the winning symbol ("X" or "O")
+        }
+    }
+    return winners; // Return an array of winning symbols
+}
+
+function updateScoreboard() {
+    document.getElementById('xWins').innerText = `X Wins: ${xTotalWins}`;
+    document.getElementById('oWins').innerText = `O Wins: ${oTotalWins}`;
+}
+
 function checkCubeWin() {
     const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+    const overallWinners = new Map(); // Use a Map to track counts of winners per symbol
+    const faceWinners = {}; // Object to keep track of winners per face
     
     for (let face of faces) {
         // Get all blocks in the current face
         const faceBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
         
         // Check for a win on this face
-        const winner = checkWin(faceBlocks);
+        const winners = checkWin(faceBlocks);
         
-        if (winner) {
-            // Wait 50 ms before announcing the winner
-            setTimeout(() => {
-                alert(`${winner} wins on the ${face} face!`);
-                resetGame(); // Optional: reset the game after a win
-            }, 50); // Delay of 50 milliseconds
-            return; // Exit once a win is found
+        if (winners.length > 0) {
+            // Count the winners
+            winners.forEach(winner => {
+                overallWinners.set(winner, (overallWinners.get(winner) || 0) + 1);
+            });
+            faceWinners[face] = winners; // Store winners for the current face
         }
+    }
+
+    // Determine if there's a balanced outcome or a draw
+    if (overallWinners.size > 0) {
+        const xWins = overallWinners.get("X") || 0;
+        const oWins = overallWinners.get("O") || 0;
+
+        // If both players have the same number of wins, it's a draw
+        if (xWins === oWins) {
+            console.log("It's a draw! Game continues."); // Feedback for a draw
+            return; // Exit without announcing a winner
+        }
+
+        // If there are winners, calculate the total wins for the winner
+        let winner, loser, winnerCount, loserCount;
+
+        if (xWins > oWins) {
+            winner = "X";
+            loser = "O";
+            winnerCount = xWins;
+            loserCount = oWins;
+            xTotalWins += (winnerCount - loserCount); // Update total wins for X
+        } else {
+            winner = "O";
+            loser = "X";
+            winnerCount = oWins;
+            loserCount = xWins;
+            oTotalWins += (winnerCount - loserCount); // Update total wins for O
+        }
+
+        // Update the scoreboard
+        updateScoreboard();
+
+        setTimeout(() => {
+            // Create a message for the winning player
+            const winnerMessage = `${winner} wins! Total wins adjusted to ${winnerCount - loserCount}.`;
+            alert(winnerMessage);
+            
+            // Optional: reset the game after announcing the winner
+            resetGame(); 
+        }, 50); // Delay of 50 milliseconds
     }
 }
 
 
 
-// Reset function to clear the game board
+
+
 function resetGame() {
-    const allBlocks = document.querySelectorAll('.block');
-    allBlocks.forEach(block => {
-        block.innerText = ''; // Clear inner text
-        block.setAttribute('data-color', ''); // Clear color if needed
-    });
+    const faces = {
+        front: 'red',
+        back: 'orange',
+        right: 'green',
+        left: 'blue',
+        top: 'yellow',
+        bottom: 'white'
+    };
+
+    // Loop through each face and reset the blocks
+    for (const face in faces) {
+        const faceBlocks = document.querySelectorAll(`.${face} .block`);
+        faceBlocks.forEach(block => {
+            block.innerText = ''; // Clear inner text
+            block.style.backgroundColor = faces[face]; // Set to the face's color
+            block.setAttribute('data-color', ''); // Optional: Clear color data attribute
+        });
+    }
+
     currentPlayer = "X"; // Reset to starting player
+
+    // Reset scoreboard display
+    document.getElementById('xWins').innerText = 'X Wins: 0';
+    document.getElementById('oWins').innerText = 'O Wins: 0';
 }
+
+
+
 
 
 
