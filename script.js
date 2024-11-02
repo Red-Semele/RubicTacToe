@@ -3,7 +3,6 @@ let rotationX = 0; // Initial rotation on X-axis
 let rotationY = 0; // Initial rotation on Y-axis
 let tempBack = ""
 let trueBackLayer = ""
-let currentPlayer = "X";
 let xTotalWins = 0; // Total wins for player X
 let oTotalWins = 0; // Total wins for player O
 
@@ -15,6 +14,10 @@ const faceColors = {
     top: 'orange',
     bottom: 'purple'
 };
+
+
+
+
 
 // Function to rotate the entire cube with arrow keys
 function rotateCube(deltaX, deltaY) {
@@ -195,10 +198,10 @@ function saveBackLayerColumn(columnIndex) {
 
 
 
+let isSuperTicTacToeMode = ""
 
 
-
-function rotateLayers(layers, type, columnIndex = null) {
+function rotateLayers(layers, type, columnIndex = null, isSuperTicTacToeMode = false) {
     let { frontLayer, backLayer, leftLayer, rightLayer, topLayer, bottomLayer } = layers;
 
     if (type === 'row') {
@@ -230,14 +233,20 @@ function rotateLayers(layers, type, columnIndex = null) {
             block.setAttribute('data-color', tempFrontColors[index]); // Set right color to front
             block.innerText = tempFrontText[index]; // Set right text to front text
         });
-        console.log(columnIndex + "PUG")
+
+        // If super Tic Tac Toe mode is activated, transfer cells
+        if (isSuperTicTacToeMode) {
+            transferCells(frontLayer, leftLayer);
+            transferCells(leftLayer, backLayer);
+            transferCells(backLayer, rightLayer);
+            transferCells(rightLayer, frontLayer);
+        }
+
         if (columnIndex == 2) {
             rotateFace('bottom', 'clockwise');
-            
-            
         } else if (columnIndex == 0) {
-                rotateFace('top', 'clockwise');
-            }
+            rotateFace('top', 'clockwise');
+        }
     } else if (type === 'column') {
         // Store current column state for data-color and inner text
         const tempFrontColors = frontLayer.map(block => block.getAttribute('data-color'));
@@ -270,23 +279,42 @@ function rotateLayers(layers, type, columnIndex = null) {
             block.setAttribute('data-color', tempFrontColors[index]); // Set bottom color to front
             block.innerText = tempFrontText[index]; // Set bottom text to front text
         });
+
+        // If super Tic Tac Toe mode is activated, transfer cells
+        if (isSuperTicTacToeMode) {
+            transferCells(frontLayer, topLayer);
+            transferCells(topLayer, backLayer);
+            transferCells(backLayer, bottomLayer);
+            transferCells(bottomLayer, frontLayer);
+        }
+
         if (columnIndex == 2) {
             rotateFace('right', 'counterclockwise');
-            
-            
         } else if (columnIndex == 0) {
-                rotateFace('left', 'clockwise');
-            }
+            rotateFace('left', 'clockwise');
+        }
     }
-
-   
-
-    // Check for a win immediately after rotating
-    
 
     // Update the colors of the blocks after rotation
     updateBlockColors(); // Call this function to apply the background colors
-    
+}
+
+// Function to transfer the cells between two layers
+function transferCells(sourceLayer, targetLayer) {
+    sourceLayer.forEach((sourceBlock, index) => {
+        const sourceCells = sourceBlock.querySelectorAll('.cell');
+        const targetBlock = targetLayer[index];
+        const targetCells = targetBlock.querySelectorAll('.cell');
+
+        // Transfer contents of cells
+        sourceCells.forEach((cell, cellIndex) => {
+            const targetCell = targetCells[cellIndex];
+            if (cell.innerText) {
+                targetCell.innerText = cell.innerText; // Copy text
+                targetCell.setAttribute('data-color', cell.getAttribute('data-color')); // Copy color
+            }
+        });
+    });
 }
 
 // Variable to keep track of the current player ("X" or "O")
@@ -318,71 +346,108 @@ function checkWin(faceBlocks) {
     return winners; // Return an array of winning symbols
 }
 
-function updateScoreboard() {
-    document.getElementById('xWins').innerText = `X Wins: ${xTotalWins}`;
-    document.getElementById('oWins').innerText = `O Wins: ${oTotalWins}`;
+// Global variables for storing player wins
+let playerWins = new Map(); // Map to store each player's win count dynamically
+let players = ["X", "O"]; // Default players, but can be set dynamically
+let currentPlayerIndex = 0;
+let currentPlayer = players[currentPlayerIndex];
+
+// Function to initialize game settings and scoreboard for multiple players
+function initializeGame(mode = "classic", numPlayers = 2) {
+    players = ["X", "O"]; // Default players for Classic mode
+
+    // If Custom mode, create additional players
+    if (mode === "custom" && numPlayers > 2) {
+        const symbols = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        for (let i = 2; i < numPlayers; i++) {
+            players.push(symbols[i]);
+        }
+    } else if (mode === "versus") {
+        scrambleCube(); //TODO: Add other difficulties to this
+    }
+
+    // Initialize win counts for each player in the playerWins Map
+    playerWins.clear();
+    players.forEach(player => playerWins.set(player, 0));
+
+    currentPlayerIndex = 0;
+    currentPlayer = players[currentPlayerIndex];
+    console.log(`Game initialized in ${mode} mode with players: ${players.join(", ")}`);
+    updateScoreboard(); // Initialize the scoreboard display
 }
 
+function updateScoreboard() {
+    const scoreboard = document.getElementById('scoreboard');
+    scoreboard.innerHTML = ''; // Clear existing scoreboard
+
+    players.forEach(player => {
+        const playerWinCount = playerWins.get(player) || 0;
+        const playerScoreElement = document.createElement('div');
+        playerScoreElement.innerText = `${player} Wins: ${playerWinCount}`;
+        playerScoreElement.id = `${player}Wins`; // Set a unique ID for each player
+        
+        // Highlight the current player's score in a different color
+        if (player === currentPlayer) {
+            playerScoreElement.style.color = "blue"; // Set highlight color (e.g., blue)
+            playerScoreElement.style.fontWeight = "bold"; // Optionally make it bold
+        } else {
+            playerScoreElement.style.color = "black"; // Default color for other players
+            playerScoreElement.style.fontWeight = "normal";
+        }
+
+        scoreboard.appendChild(playerScoreElement);
+    });
+}
+
+// Function to check if a player has won on a cube face
 function checkCubeWin() {
     const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
-    const overallWinners = new Map(); // Use a Map to track counts of winners per symbol
-    const faceWinners = {}; // Object to keep track of winners per face
-    
-    for (let face of faces) {
-        // Get all blocks in the current face
+    const overallWinners = new Map();
+    const faceWinners = {}; // Track winners per face
+
+    faces.forEach(face => {
         const faceBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
-        
-        // Check for a win on this face
         const winners = checkWin(faceBlocks);
-        
+
         if (winners.length > 0) {
-            // Count the winners
             winners.forEach(winner => {
                 overallWinners.set(winner, (overallWinners.get(winner) || 0) + 1);
             });
-            faceWinners[face] = winners; // Store winners for the current face
+            faceWinners[face] = winners; // Store winners for this face
         }
-    }
+    });
 
-    // Determine if there's a balanced outcome or a draw
+    // Determine the leading player or if there's a draw
     if (overallWinners.size > 0) {
-        const xWins = overallWinners.get("X") || 0;
-        const oWins = overallWinners.get("O") || 0;
+        let leadingPlayer = null;
+        let maxWins = 0;
+        let isDraw = true;
 
-        // If both players have the same number of wins, it's a draw
-        if (xWins === oWins) {
-            console.log("It's a draw! Game continues."); // Feedback for a draw
-            return; // Exit without announcing a winner
+        overallWinners.forEach((wins, player) => {
+            if (wins > maxWins) {
+                maxWins = wins;
+                leadingPlayer = player;
+                isDraw = false;
+            } else if (wins === maxWins) {
+                isDraw = true;
+            }
+        });
+
+        if (isDraw) {
+            console.log("It's a draw! Game continues.");
+            return;
         }
 
-        // If there are winners, calculate the total wins for the winner
-        let winner, loser, winnerCount, loserCount;
-
-        if (xWins > oWins) {
-            winner = "X";
-            loser = "O";
-            winnerCount = xWins;
-            loserCount = oWins;
-            xTotalWins += (winnerCount - loserCount); // Update total wins for X
-        } else {
-            winner = "O";
-            loser = "X";
-            winnerCount = oWins;
-            loserCount = xWins;
-            oTotalWins += (winnerCount - loserCount); // Update total wins for O
-        }
-
-        // Update the scoreboard
-        updateScoreboard();
+        // Adjust the win count for the winning player
+        const winnerCount = maxWins;
+        playerWins.set(leadingPlayer, (playerWins.get(leadingPlayer) || 0) + winnerCount);
+        updateScoreboard(); // Refresh the scoreboard
 
         setTimeout(() => {
-            // Create a message for the winning player
-            const winnerMessage = `${winner} wins! Total wins adjusted to ${winnerCount - loserCount}.`;
+            const winnerMessage = `${leadingPlayer} wins! Total wins updated.`;
             alert(winnerMessage);
-            
-            // Optional: reset the game after announcing the winner
-            resetGame(); 
-        }, 50); // Delay of 50 milliseconds
+            resetGame(); // Reset the game for another round
+        }, 50);
     }
 }
 
@@ -410,7 +475,8 @@ function resetGame() {
         });
     }
 
-    currentPlayer = "X"; // Reset to starting player
+    currentPlayerIndex = 0;
+    currentPlayer = players[currentPlayerIndex];
 
     // Reset scoreboard display
 }
@@ -785,7 +851,10 @@ function getRowOrColumn(blockId, direction) {
         default:
             console.log(`Unknown swipe direction: ${direction}`);
     }
-    currentPlayer = currentPlayer === "X" ? "O" : "X"; // Switch to the other player
+    currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+    currentPlayer = players[currentPlayerIndex];
+    console.log("Next turn: Player", currentPlayer);
+    updateScoreboard()
     checkCubeWin();
 }
 
@@ -802,83 +871,132 @@ function mirrorRowOrColumn(or) {
     }
 }
 
-// Handle mousedown to capture start position and coordinates
+
+
+
+// Track the starting position on mouse down or touch start
 function handleBlockMouseDown(event) {
-    event.preventDefault(); // Prevent default drag behavior
-    startBlock = event.target;    // Set the start block where mousedown occurred
-    startX = event.clientX;       // Capture the initial X coordinate
-    startY = event.clientY;       // Capture the initial Y coordinate
+    event.preventDefault();
+    startBlock = event.target.closest('.block'); // Closest .block to handle both .block and .cell elements
+    startX = event.clientX || event.touches[0].clientX; // Capture initial X coordinate
+    startY = event.clientY || event.touches[0].clientY; // Capture initial Y coordinate
     console.log("Drag started on:", startBlock.id, "at coordinates:", startX, startY);
 }
 
-// Handle mouseup to detect if the drag finished on a different block and direction
+// Handle mouse up or touch end to detect swipe direction
 function handleBlockMouseUp(event) {
-    const endBlock = event.target; // Get the block where mouseup occurred
-    console.log("End: " + endBlock.id);
+    const endBlock = event.target.closest('.block'); // Closest .block for consistent handling
+    const endX = event.clientX || event.changedTouches[0].clientX; // Capture end X coordinate
+    const endY = event.clientY || event.changedTouches[0].clientY; // Capture end Y coordinate
 
-    // If start and end block are the same, treat as a click
+    console.log("Drag ended on:", endBlock.id, "at coordinates:", endX, endY);
+
+    // If the start and end blocks are the same, treat as a click
     if (startBlock === endBlock) {
-        handleBlockClick(event); // Call the click handler
+        // Check if the click was on a cell
+        const clickedCell = event.target.closest('.cell');
+        if (clickedCell) {
+            handleCellClick(event, clickedCell); // Trigger cell click event
+        } else {
+            handleBlockClick(event); // Trigger block click event
+        }
     } else {
-        // Extract block numbers from IDs
-        const startBlockNumber = parseInt(startBlock.id[1]); // Get the block number from the start block
-        const endBlockNumber = parseInt(endBlock.id[1]);     // Get the block number from the end block
+        // Determine swipe direction based on coordinate differences
+        const deltaX = endX - startX;
+        const deltaY = endY - startY;
 
-        // Determine the direction of the swipe based on block numbers
-        const rowStart = Math.floor(startBlockNumber / 3);
-        const rowEnd = Math.floor(endBlockNumber / 3);
-        const colStart = startBlockNumber % 3;
-        const colEnd = endBlockNumber % 3;
-
-        if (rowStart === rowEnd) {
-            // Horizontal swipe (left or right)
-            if (colEnd > colStart) {
+        if (Math.abs(deltaX) > Math.abs(deltaY)) {
+            // Horizontal swipe
+            if (deltaX > 0) {
                 console.log("Dragged right");
                 getRowOrColumn(startBlock.id, "right");
             } else {
                 console.log("Dragged left");
                 getRowOrColumn(startBlock.id, "left");
             }
-        } else if (colStart === colEnd) {
-            // Vertical swipe (up or down)
-            if (rowEnd > rowStart) {
+        } else {
+            // Vertical swipe
+            if (deltaY > 0) {
                 console.log("Dragged down");
                 getRowOrColumn(startBlock.id, "down");
             } else {
                 console.log("Dragged up");
                 getRowOrColumn(startBlock.id, "up");
             }
-        } else {
-            console.log("Invalid swipe. It must be either horizontal or vertical.");
         }
     }
 
-    startBlock = null; // Reset start block for the next drag
+    startBlock = null; // Reset for the next swipe
 }
 
-// Handle the click to place the player's mark
-function handleBlockClick(event) {
-    const block = event.target;
+// Handle clicks on cells
+function handleCellClick(event, cell) {
+    // Only set the text if the cell is empty
+    if (!cell.innerText) {
+        cell.innerText = currentPlayer; // Set current player's symbol
+        checkCubeWin(); // Check win condition
 
-    // Only set the text if the block is empty
-    if (!block.innerText) {
-        block.innerText = currentPlayer; // Set current player's symbol
-        currentPlayer = currentPlayer === "X" ? "O" : "X"; // Switch to the other player
-        
-        // Check for a win after each move
-        checkCubeWin();
+        // Move to the next player
+        currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+        currentPlayer = players[currentPlayerIndex];
+        updateScoreboard();
+        console.log("Next turn: Player", currentPlayer);
     }
 }
 
-// Event listeners for each block
-document.querySelectorAll('.block').forEach(block => {
-    block.addEventListener('mousedown', handleBlockMouseDown); // Track the starting block
-    block.addEventListener('mouseup', handleBlockMouseUp); // Check if drag ended on the same block
-    block.addEventListener('touchstart', handleBlockMouseDown); // Track the starting block for touch
-    block.addEventListener('touchend', handleBlockMouseUp); // Check if drag ended on the same block for touch
+// Handle clicks on blocks
+function handleBlockClick(event) {
+    const block = event.target.closest('.block');
+
+    // Check if the block itself is empty (to prevent overwriting)
+    if (!block.innerText) {
+        block.innerText = currentPlayer; // Set current player's symbol
+        checkCubeWin(); // Check win condition
+
+        // Update player turn
+        currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+        currentPlayer = players[currentPlayerIndex];
+        updateScoreboard();
+        console.log("Next turn: Player", currentPlayer);
+    }
+}
+
+// Attach event listeners for both .block and .cell
+document.querySelectorAll('.block').forEach(element => {
+    element.addEventListener('mousedown', handleBlockMouseDown);
+    element.addEventListener('mouseup', handleBlockMouseUp);
+    element.addEventListener('touchstart', handleBlockMouseDown);
+    element.addEventListener('touchend', handleBlockMouseUp);
 });
 
+// Attach event listeners for cells to handle direct clicks
+document.querySelectorAll('.cell').forEach(cell => {
+    cell.addEventListener('click', (event) => handleCellClick(event, cell)); // Handle clicks directly on cells
+});
 
+function transferCells(sourceLayer, targetLayer) {
+    sourceLayer.forEach((sourceBlock, index) => {
+        const sourceCells = Array.from(sourceBlock.querySelectorAll('.cell')); // Get cells as an array
+        const targetBlock = targetLayer[index];
+
+        // Clear the target block's cells first
+        targetBlock.innerHTML = ''; // Ensure target is empty before appending new cells
+
+        // Move and transfer contents of cells
+        sourceCells.forEach(cell => {
+            // Create a new cell element
+            const newCell = document.createElement('div');
+            newCell.className = 'cell'; // Assign the class to the new cell
+
+            // Transfer innerText and data-color from the source cell
+            newCell.innerText = cell.innerText; // Copy text
+            newCell.setAttribute('data-color', cell.getAttribute('data-color')); // Copy color
+
+            // Append the new cell to the target block
+            targetBlock.appendChild(newCell);
+        });
+    });
+}
 
 function resetCubeRotation() {
     rotationX = 0;
@@ -886,8 +1004,77 @@ function resetCubeRotation() {
     cube.style.transform = `rotateX(0deg) rotateY(0deg)`;
 }
 
+initializeGame("classic", 2);
 
 
+function scrambleCube() {
+    const minMoves = 3;
+    const maxMoves = 5;
+    let remainingMoves = Math.floor(Math.random() * (maxMoves - minMoves + 1)) + minMoves;
+    console.log("Moves " + remainingMoves)
+
+    while (remainingMoves > 0) {
+        // Randomly select one of the three functions (rotateRow, rotateColumn, or rotateSColumn)
+        const moveType = Math.floor(Math.random() * 3); // 0, 1, or 2 for three equal options
+        const index = Math.floor(Math.random() * 3); // Random index between 0 and 2
+        const twistCount = Math.min(Math.floor(Math.random() * 3) + 1, remainingMoves); // 1 to 3 twists, capped at remainingMoves
+
+        // Apply the selected rotation
+        switch (moveType) {
+            case 0:
+                console.log(`Rotating row ${index}, ${twistCount} time(s)`);
+                for (let j = 0; j < twistCount; j++) {
+                    rotateRow(index);
+                }
+                break;
+            case 1:
+                console.log(`Rotating column ${index}, ${twistCount} time(s)`);
+                for (let j = 0; j < twistCount; j++) {
+                    rotateColumn(index);
+                }
+                break;
+            case 2:
+                console.log(`Rotating SColumn ${index}, ${twistCount} time(s)`);
+                for (let j = 0; j < twistCount; j++) {
+                    rotateSColumn(index);
+                }
+                break;
+        }
+
+        // Subtract twistCount from the remaining moves
+        remainingMoves -= twistCount;
+    }
+}
+
+function initializeCustomMode() {
+    let players = prompt("Enter the number of players for Custom Mode:", "5");
+    players = parseInt(players, 10); // Convert to an integer
+    if (!isNaN(players) && players > 0) {
+      initializeGame('custom', players);
+    } else {
+      alert("Please enter a valid number of players.");
+    }
+  }
 
 
+  function setupSuperTicTacToe() {
+    // Convert each block into a 3x3 grid
+    isSuperTicTacToeMode = true
+    const blocks = document.querySelectorAll(".block");
+    blocks.forEach(block => {
+      block.innerHTML = "";  // Clear any existing text
+      const innerGrid = document.createElement("div");
+      innerGrid.className = "innerGrid";
+      for (let i = 0; i < 9; i++) {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.addEventListener("click", handleCellClick);
+        innerGrid.appendChild(cell);
+      }
+      block.appendChild(innerGrid);
+    });
+  }
 
+  
+
+  //setupSuperTicTacToe()
