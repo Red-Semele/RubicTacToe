@@ -42,14 +42,13 @@ function rotateRow(rowIndex) {
     const layers = getRowLayers(rowIndex);
     console.log("Pug" + rowIndex)
     rotateLayers(layers, 'row', rowIndex);
-    currentPlayer = currentPlayer === "X" ? "O" : "X"; // Switch to the other player
 }
 
 function rotateColumn(colIndex) {
     
     const layers = getColumnLayers(colIndex);
     rotateLayers(layers, 'column', colIndex);
-    currentPlayer = currentPlayer === "X" ? "O" : "X"; // Switch to the other player
+    
 }
 
 function toggleDebug(isDebug) {
@@ -311,12 +310,16 @@ function checkCubeWin() {
         const winner = checkWin(faceBlocks);
         
         if (winner) {
-            alert(`${winner} wins on the ${face} face!`);
-            resetGame(); // Optional: reset the game after a win
+            // Wait 50 ms before announcing the winner
+            setTimeout(() => {
+                alert(`${winner} wins on the ${face} face!`);
+                resetGame(); // Optional: reset the game after a win
+            }, 50); // Delay of 50 milliseconds
             return; // Exit once a win is found
         }
     }
 }
+
 
 
 // Reset function to clear the game board
@@ -329,19 +332,7 @@ function resetGame() {
     currentPlayer = "X"; // Reset to starting player
 }
 
-// Update handleBlockClick to include win check
-function handleBlockClick(event) {
-    const block = event.target;
 
-    // Only set the text if the block is empty
-    if (!block.innerText) {
-        block.innerText = currentPlayer; // Set current player's symbol
-        currentPlayer = currentPlayer === "X" ? "O" : "X"; // Switch to the other player
-        
-        // Check for a win after each move
-        checkCubeWin();
-    }
-}
 
 // Initialize Tic-Tac-Toe with win-check functionality
 function initializeTicTacToe() {
@@ -389,7 +380,6 @@ function rotateLeftColumn() {
     });
 
     updateBlockColors();
-    checkCubeWin();
 }
 
 function rotateSColumn(columnIndex) {
@@ -444,7 +434,6 @@ function rotateSColumn(columnIndex) {
     leftLayer[i * 3 + columnIndex].setAttribute('data-color', tempTopColors[columnIndex * 3 + (2 - i)]);
     leftLayer[i * 3 + columnIndex].innerText = tempTopText[columnIndex * 3 + (2 - i)];
 }
-    currentPlayer = currentPlayer === "X" ? "O" : "X"; // Switch to the other player
     // Update colors of blocks
     updateBlockColors();
     if (columnIndex == 2) {
@@ -456,7 +445,7 @@ function rotateSColumn(columnIndex) {
         }
 
     
-    checkCubeWin();
+    
 }
 
 
@@ -537,8 +526,6 @@ function rotateFace(face, direction) {
     // Update colors of blocks (if you have a function for this)
     updateBlockColors();
 
-    // Check if the cube is in a winning state (if you have a function for this)
-    checkCubeWin();
 }
 let startBlock = null;      // Store the block where the drag starts
 let startX = 0, startY = 0; // Store the initial coordinates of mousedown
@@ -709,6 +696,8 @@ function getRowOrColumn(blockId, direction) {
         default:
             console.log(`Unknown swipe direction: ${direction}`);
     }
+    currentPlayer = currentPlayer === "X" ? "O" : "X"; // Switch to the other player
+    checkCubeWin();
 }
 
 function mirrorRowOrColumn(or) {
