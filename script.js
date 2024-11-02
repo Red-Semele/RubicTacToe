@@ -42,12 +42,14 @@ function rotateRow(rowIndex) {
     const layers = getRowLayers(rowIndex);
     console.log("Pug" + rowIndex)
     rotateLayers(layers, 'row', rowIndex);
+    currentPlayer = currentPlayer === "X" ? "O" : "X"; // Switch to the other player
 }
 
 function rotateColumn(colIndex) {
     
     const layers = getColumnLayers(colIndex);
     rotateLayers(layers, 'column', colIndex);
+    currentPlayer = currentPlayer === "X" ? "O" : "X"; // Switch to the other player
 }
 
 function toggleDebug(isDebug) {
@@ -442,7 +444,7 @@ function rotateSColumn(columnIndex) {
     leftLayer[i * 3 + columnIndex].setAttribute('data-color', tempTopColors[columnIndex * 3 + (2 - i)]);
     leftLayer[i * 3 + columnIndex].innerText = tempTopText[columnIndex * 3 + (2 - i)];
 }
-
+    currentPlayer = currentPlayer === "X" ? "O" : "X"; // Switch to the other player
     // Update colors of blocks
     updateBlockColors();
     if (columnIndex == 2) {
@@ -538,6 +540,264 @@ function rotateFace(face, direction) {
     // Check if the cube is in a winning state (if you have a function for this)
     checkCubeWin();
 }
+let startBlock = null;      // Store the block where the drag starts
+let startX = 0, startY = 0; // Store the initial coordinates of mousedown
+
+function getRowOrColumn(blockId, direction) {
+    const face = blockId[0];                  // Get the face letter from the first character of the ID
+    const blockNumber = parseInt(blockId[1]); // Get the block number from the second character of the ID
+    const row = Math.floor(blockNumber / 3);  // Calculate row (0, 1, 2)
+    const col = blockNumber % 3;              // Calculate column (0, 1, 2)
+    let angle = "";
+    let mirroredCol = "";
+
+    // Determine the angle and direction of the swipe
+    switch (direction) {
+        case 'right':
+        case 'left':
+            angle = "horizontal";
+            break;
+        case 'up':
+        case 'down':
+            angle = "vertical";
+            break;
+        default:
+            console.log(`Unknown swipe direction: ${direction}`);
+            return; // Exit if direction is unknown
+    }
+
+    if (angle === "horizontal") {
+        console.log(`Swiped ${direction} in row ${row} on face ${face}`);
+    } else {
+        console.log(`Swiped ${direction} in column ${col} on face ${face}`);
+    }
+
+    // Handle the rotation based on direction and face
+    switch (angle) {
+        case "horizontal":
+            console.log("HORE");
+            // Handle left/right swipes (rows)
+            switch (face) {
+                case 'f': // Front face
+                case 'b': // Back face
+                case 'l': // Left face
+                case 'r': // Right face
+                    // Determine the rotation direction
+                    switch (direction) {
+                        case 'right':
+                            rotateRow(row); // Call row function with the row number
+                            console.log(`Rotated row ${row} on face ${face} clockwise`);
+                            break;
+                        case 'left':
+                            for (let i = 0; i < 3; i++) {
+                                rotateRow(row); // Call row function three times for counterclockwise
+                            }
+                            console.log(`Rotated row ${row} on face ${face} counterclockwise`);
+                            break;
+                    }
+                    break;
+
+                case 'd': // Bottom face
+                    mirroredCol = mirrorRowOrColumn(row);
+                    switch (direction) {
+                        case 'right':
+                            rotateSColumn(mirroredCol);
+                            console.log(`Rotated column ${mirroredCol} on face ${face} clockwise`);
+                            break;
+                        case 'left':
+                            for (let i = 0; i < 3; i++) {
+                                rotateSColumn(mirroredCol); // Counterclockwise
+                            }
+                            console.log(`Rotated column ${mirroredCol} on face ${face} counterclockwise`);
+                            break;
+                    }
+                    break;
+
+                case 'u': // Top face
+                    switch (direction) {
+                        case 'right':
+                            rotateSColumn(row); // Call row function with the row number
+                            console.log(`Rotated column ${row} on face ${face} clockwise`);
+                            break;
+                        case 'left':
+                            for (let i = 0; i < 3; i++) {
+                                rotateSColumn(row); // Counterclockwise
+                            }
+                            console.log(`Rotated column ${row} on face ${face} counterclockwise`);
+                            break;
+                    }
+                    break;
+
+                default:
+                    console.log(`Swipe direction ${direction} on face ${face} is not handled.`);
+            }
+            break;
+
+        case "vertical":
+            console.log("Erti");
+            // Handle up/down swipes (columns)
+            switch (face) {
+                case 'f': // Front face
+                case 'u': // Up face
+                case 'd': // Down face
+                    switch (direction) {
+                        case 'down':
+                            rotateColumn(col);
+                            console.log(`Rotated column ${col} on face ${face} clockwise`);
+                            break;
+                        case 'up':
+                            for (let i = 0; i < 3; i++) {
+                                rotateColumn(col); // Counterclockwise
+                            }
+                            console.log(`Rotated column ${col} on face ${face} counterclockwise`);
+                            break;
+                    }
+                    break;
+
+                case 'b': // Back face
+                    mirroredCol = mirrorRowOrColumn(col);
+                    switch (direction) {
+                        case 'down':
+                            rotateColumn(mirroredCol);
+                            console.log(`Rotated column ${mirroredCol} on face ${face} clockwise`);
+                            break;
+                        case 'up':
+                            for (let i = 0; i < 3; i++) {
+                                rotateColumn(mirroredCol); // Counterclockwise
+                            }
+                            console.log(`Rotated column ${mirroredCol} on face ${face} counterclockwise`);
+                            break;
+                    }
+                    break;
+
+                case 'l': // Left face
+                    switch (direction) {
+                        case 'down':
+                            rotateSColumn(col);
+                            console.log(`Rotated column ${col} on face ${face} clockwise`);
+                            break;
+                        case 'up':
+                            for (let i = 0; i < 3; i++) {
+                                rotateSColumn(col); // Counterclockwise
+                            }
+                            console.log(`Rotated column ${col} on face ${face} counterclockwise`);
+                            break;
+                    }
+                    break;
+
+                case 'r': // Right face
+                    mirroredCol = mirrorRowOrColumn(col);
+                    switch (direction) {
+                        case 'down':
+                            rotateSColumn(mirroredCol);
+                            console.log(`Rotated column ${mirroredCol} on face ${face} clockwise`);
+                            break;
+                        case 'up':
+                            for (let i = 0; i < 3; i++) {
+                                rotateSColumn(mirroredCol); // Counterclockwise
+                            }
+                            console.log(`Rotated column ${mirroredCol} on face ${face} counterclockwise`);
+                            break;
+                    }
+                    break;
+
+                default:
+                    console.log(`Swipe direction ${direction} on face ${face} is not handled.`);
+            }
+            break;
+
+        default:
+            console.log(`Unknown swipe direction: ${direction}`);
+    }
+}
+
+function mirrorRowOrColumn(or) {
+    switch (or) {
+        case 0:
+            return 2; // Mirror 0 to 2
+        case 1:
+            return 1; // Stay as 1
+        case 2:
+            return 0; // Mirror 2 to 0
+        default:
+            return or; // Fallback
+    }
+}
+
+// Handle mousedown to capture start position and coordinates
+function handleBlockMouseDown(event) {
+    event.preventDefault(); // Prevent default drag behavior
+    startBlock = event.target;    // Set the start block where mousedown occurred
+    startX = event.clientX;       // Capture the initial X coordinate
+    startY = event.clientY;       // Capture the initial Y coordinate
+    console.log("Drag started on:", startBlock.id, "at coordinates:", startX, startY);
+}
+
+// Handle mouseup to detect if the drag finished on a different block and direction
+function handleBlockMouseUp(event) {
+    const endBlock = event.target; // Get the block where mouseup occurred
+    console.log("End: " + endBlock.id);
+
+    // If start and end block are the same, treat as a click
+    if (startBlock === endBlock) {
+        handleBlockClick(event); // Call the click handler
+    } else {
+        // Extract block numbers from IDs
+        const startBlockNumber = parseInt(startBlock.id[1]); // Get the block number from the start block
+        const endBlockNumber = parseInt(endBlock.id[1]);     // Get the block number from the end block
+
+        // Determine the direction of the swipe based on block numbers
+        const rowStart = Math.floor(startBlockNumber / 3);
+        const rowEnd = Math.floor(endBlockNumber / 3);
+        const colStart = startBlockNumber % 3;
+        const colEnd = endBlockNumber % 3;
+
+        if (rowStart === rowEnd) {
+            // Horizontal swipe (left or right)
+            if (colEnd > colStart) {
+                console.log("Dragged right");
+                getRowOrColumn(startBlock.id, "right");
+            } else {
+                console.log("Dragged left");
+                getRowOrColumn(startBlock.id, "left");
+            }
+        } else if (colStart === colEnd) {
+            // Vertical swipe (up or down)
+            if (rowEnd > rowStart) {
+                console.log("Dragged down");
+                getRowOrColumn(startBlock.id, "down");
+            } else {
+                console.log("Dragged up");
+                getRowOrColumn(startBlock.id, "up");
+            }
+        } else {
+            console.log("Invalid swipe. It must be either horizontal or vertical.");
+        }
+    }
+
+    startBlock = null; // Reset start block for the next drag
+}
+
+// Handle the click to place the player's mark
+function handleBlockClick(event) {
+    const block = event.target;
+
+    // Only set the text if the block is empty
+    if (!block.innerText) {
+        block.innerText = currentPlayer; // Set current player's symbol
+        currentPlayer = currentPlayer === "X" ? "O" : "X"; // Switch to the other player
+        
+        // Check for a win after each move
+        checkCubeWin();
+    }
+}
+
+// Event listeners for each block
+document.querySelectorAll('.block').forEach(block => {
+    block.addEventListener('mousedown', handleBlockMouseDown); // Track the starting block
+    block.addEventListener('mouseup', handleBlockMouseUp); // Check if drag ended on the same block
+});
+
 
 
 
