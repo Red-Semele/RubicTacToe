@@ -41,6 +41,10 @@ document.addEventListener('keydown', (event) => {
         case 'Shift':
             toggleDebug(true); // Enable debug mode
             break;
+        case 'r':
+            resetCubeRotation();
+            break;
+            
     }
 });
 
@@ -685,14 +689,15 @@ function getRowOrColumn(blockId, direction) {
                 case 'u': // Top face
                     switch (direction) {
                         case 'right':
-                            rotateSColumn(row); // Call row function with the row number
-                            console.log(`Rotated column ${row} on face ${face} clockwise`);
-                            break;
-                        case 'left':
                             for (let i = 0; i < 3; i++) {
                                 rotateSColumn(row); // Counterclockwise
                             }
                             console.log(`Rotated column ${row} on face ${face} counterclockwise`);
+                            break;
+                            
+                        case 'left':
+                            rotateSColumn(row); // Call row function with the row number
+                            console.log(`Rotated column ${row} on face ${face} clockwise`);
                             break;
                     }
                     break;
@@ -758,15 +763,17 @@ function getRowOrColumn(blockId, direction) {
                     mirroredCol = mirrorRowOrColumn(col);
                     switch (direction) {
                         case 'down':
-                            rotateSColumn(mirroredCol);
-                            console.log(`Rotated column ${mirroredCol} on face ${face} clockwise`);
-                            break;
-                        case 'up':
                             for (let i = 0; i < 3; i++) {
                                 rotateSColumn(mirroredCol); // Counterclockwise
                             }
                             console.log(`Rotated column ${mirroredCol} on face ${face} counterclockwise`);
                             break;
+                            
+                        case 'up':
+                            rotateSColumn(mirroredCol);
+                            console.log(`Rotated column ${mirroredCol} on face ${face} clockwise`);
+                            break;
+                            
                     }
                     break;
 
@@ -873,7 +880,11 @@ document.querySelectorAll('.block').forEach(block => {
 
 
 
-
+function resetCubeRotation() {
+    rotationX = 0;
+    rotationY = 0;
+    cube.style.transform = `rotateX(0deg) rotateY(0deg)`;
+}
 
 
 
