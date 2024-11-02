@@ -868,6 +868,8 @@ function handleBlockClick(event) {
 document.querySelectorAll('.block').forEach(block => {
     block.addEventListener('mousedown', handleBlockMouseDown); // Track the starting block
     block.addEventListener('mouseup', handleBlockMouseUp); // Check if drag ended on the same block
+    block.addEventListener('touchstart', handleBlockMouseDown); // Track the starting block for touch
+    block.addEventListener('touchend', handleBlockMouseUp); // Check if drag ended on the same block for touch
 });
 
 
