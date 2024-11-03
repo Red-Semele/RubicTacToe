@@ -883,51 +883,48 @@ function handleBlockMouseDown(event) {
     console.log("Drag started on:", startBlock.id, "at coordinates:", startX, startY);
 }
 
-// Handle mouse up or touch end to detect swipe direction
 function handleBlockMouseUp(event) {
-    const endBlock = event.target.closest('.block'); // Closest .block for consistent handling
-    const endX = event.clientX || event.changedTouches[0].clientX; // Capture end X coordinate
-    const endY = event.clientY || event.changedTouches[0].clientY; // Capture end Y coordinate
+    const endBlock = event.target; // Get the block where mouseup occurred
+    console.log("End: " + endBlock.id);
 
-    console.log("Drag ended on:", endBlock.id, "at coordinates:", endX, endY);
-
-    // If the start and end blocks are the same, treat as a click
+    // If start and end block are the same, treat as a click
     if (startBlock === endBlock) {
-        // Check if the click was on a cell
-        const clickedCell = event.target.closest('.cell');
-        if (clickedCell) {
-            handleCellClick(event, clickedCell); // Trigger cell click event
-        } else {
-            handleBlockClick(event); // Trigger block click event
-        }
+        handleBlockClick(event); // Call the click handler
     } else {
-        // Determine swipe direction based on coordinate differences
-        const deltaX = endX - startX;
-        const deltaY = endY - startY;
+        // Extract block numbers from IDs
+        const startBlockNumber = parseInt(startBlock.id[1]); // Get the block number from the start block
+        const endBlockNumber = parseInt(endBlock.id[1]);     // Get the block number from the end block
 
-        if (Math.abs(deltaX) > Math.abs(deltaY)) {
-            // Horizontal swipe
-            if (deltaX > 0) {
+        // Determine the direction of the swipe based on block numbers
+        const rowStart = Math.floor(startBlockNumber / 3);
+        const rowEnd = Math.floor(endBlockNumber / 3);
+        const colStart = startBlockNumber % 3;
+        const colEnd = endBlockNumber % 3;
+
+        if (rowStart === rowEnd) {
+            // Horizontal swipe (left or right)
+            if (colEnd > colStart) {
                 console.log("Dragged right");
                 getRowOrColumn(startBlock.id, "right");
             } else {
                 console.log("Dragged left");
                 getRowOrColumn(startBlock.id, "left");
             }
-        } else {
-            // Vertical swipe
-            if (deltaY > 0) {
+        } else if (colStart === colEnd) {
+            // Vertical swipe (up or down)
+            if (rowEnd > rowStart) {
                 console.log("Dragged down");
                 getRowOrColumn(startBlock.id, "down");
             } else {
                 console.log("Dragged up");
                 getRowOrColumn(startBlock.id, "up");
             }
+        } else {
+            console.log("Invalid swipe. It must be either horizontal or vertical.");
         }
     }
-
-    startBlock = null; // Reset for the next swipe
 }
+
 
 // Handle clicks on cells
 function handleCellClick(event, cell) {
