@@ -47,6 +47,10 @@ document.addEventListener('keydown', (event) => {
         case 'r':
             resetCubeRotation();
             break;
+        case 'u':
+            // Listen for 'u' key press to trigger undo
+            undoLastMove();
+            break;
             
     }
 });
@@ -682,7 +686,10 @@ function rotateFace(face, direction) {
 let startBlock = null;      // Store the block where the drag starts
 let startX = 0, startY = 0; // Store the initial coordinates of mousedown
 
-function getRowOrColumn(blockId, direction) {
+// Global move history stack to keep track of moves
+const moveHistory = [];
+
+function getRowOrColumn(blockId, direction, skipHistory = false) {
     const face = blockId[0];                  // Get the face letter from the first character of the ID
     const blockNumber = parseInt(blockId[1]); // Get the block number from the second character of the ID
     const row = Math.floor(blockNumber / 3);  // Calculate row (0, 1, 2)
@@ -711,10 +718,21 @@ function getRowOrColumn(blockId, direction) {
         console.log(`Swiped ${direction} in column ${col} on face ${face}`);
     }
 
+    // Save the move to history
+    if (!skipHistory) {
+        moveHistory.push({
+            type: 'swipe',
+            face,
+            row,
+            col,
+            direction,
+            angle
+        });
+    }
+
     // Handle the rotation based on direction and face
     switch (angle) {
         case "horizontal":
-            console.log("HORE");
             // Handle left/right swipes (rows)
             switch (face) {
                 case 'f': // Front face
@@ -774,7 +792,6 @@ function getRowOrColumn(blockId, direction) {
             break;
 
         case "vertical":
-            console.log("Erti");
             // Handle up/down swipes (columns)
             switch (face) {
                 case 'f': // Front face
@@ -857,6 +874,48 @@ function getRowOrColumn(blockId, direction) {
     updateScoreboard()
     checkCubeWin();
 }
+
+function undoLastMove() {
+    if (moveHistory.length === 0) {
+        console.log("No moves to undo");
+        return;
+    }
+
+    // Get the last move
+    const lastMove = moveHistory.pop();
+
+    if (lastMove.type === 'placement') {
+        // Undo a block placement
+        const block = document.getElementById(lastMove.blockId);
+        if (block) {
+            block.innerText = ""; // Clear the block
+            console.log(`Undid placement on ${lastMove.blockId} by Player ${lastMove.player}`);
+        }
+
+        // Restore the player to the previous one
+        currentPlayerIndex = players.indexOf(lastMove.player);
+        currentPlayer = players[currentPlayerIndex];
+        updateScoreboard();
+        console.log(`Reverting to previous turn: Player ${currentPlayer}`);
+    } else if (lastMove.type === 'swipe') {
+        // Undo a swipe by reversing direction
+        const reverseDirection = (dir) => {
+            switch (dir) {
+                case 'right': return 'left';
+                case 'left': return 'right';
+                case 'up': return 'down';
+                case 'down': return 'up';
+            }
+        };
+
+        // Perform the reverse swipe
+        getRowOrColumn(`${lastMove.face}${lastMove.row * 3 + lastMove.col}`, reverseDirection(lastMove.direction), true);
+        console.log("Undid swipe:", lastMove);
+    }
+}
+
+
+
 
 function mirrorRowOrColumn(or) {
     switch (or) {
@@ -942,15 +1001,30 @@ function handleCellClick(event, cell) {
 }
 
 // Handle clicks on blocks
+
+
+
+// Track block placements and swipes in history and enable undo
 function handleBlockClick(event) {
     const block = event.target.closest('.block');
 
-    // Check if the block itself is empty (to prevent overwriting)
+    // Check if the block is empty (to prevent overwriting)
     if (!block.innerText) {
-        block.innerText = currentPlayer; // Set current player's symbol
-        checkCubeWin(); // Check win condition
+        // Place the current player's sign
+        block.innerText = currentPlayer;
 
-        // Update player turn
+        // Save this move to history for undo purposes
+        moveHistory.push({
+            type: 'placement',
+            blockId: block.id,
+            player: currentPlayer
+        });
+        console.log(`Player ${currentPlayer} placed on ${block.id}`);
+
+        // Check win condition and update the turn
+        checkCubeWin();
+
+        // Switch players
         currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
         currentPlayer = players[currentPlayerIndex];
         updateScoreboard();
