@@ -249,7 +249,7 @@ function rotateLayers(layers, type, columnIndex = null, isSuperTicTacToeMode = f
         if (columnIndex == 2) {
             rotateFace('bottom', 'clockwise');
         } else if (columnIndex == 0) {
-            rotateFace('top', 'clockwise');
+            rotateFace('top', 'counterclockwise');
         }
     } else if (type === 'column') {
         // Store current column state for data-color and inner text
