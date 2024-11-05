@@ -5,6 +5,7 @@ let tempBack = ""
 let trueBackLayer = ""
 let xTotalWins = 0; // Total wins for player X
 let oTotalWins = 0; // Total wins for player O
+let delayedWin = false
 
 const faceColors = {
     front: 'red',
@@ -405,6 +406,7 @@ function updateScoreboard() {
 
 // Function to check if a player has won on a cube face
 function checkCubeWin() {
+    console.log("Winner", currentPlayer)
     const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
     const overallWinners = new Map();
     const faceWinners = {}; // Track winners per face
@@ -443,15 +445,29 @@ function checkCubeWin() {
         }
 
         // Adjust the win count for the winning player
-        const winnerCount = maxWins;
-        playerWins.set(leadingPlayer, (playerWins.get(leadingPlayer) || 0) + winnerCount);
-        updateScoreboard(); // Refresh the scoreboard
+        let showWin = false
+        if (delayedWin) {
+            if (leadingPlayer == currentPlayer) {
+                console.log("SHOW WINS", leadingPlayer, currentPlayer)
+                showWin = true
+            } else {
+                return
+            }
+           
+        } else {
+            showWin = true
+        }
+        if (showWin) {
+            const winnerCount = maxWins;
+            playerWins.set(leadingPlayer, (playerWins.get(leadingPlayer) || 0) + winnerCount);
+            updateScoreboard(); // Refresh the scoreboard
 
-        setTimeout(() => {
-            const winnerMessage = `${leadingPlayer} wins! Total wins updated.`;
-            alert(winnerMessage);
-            resetGame(); // Reset the game for another round
-        }, 50);
+            setTimeout(() => {
+                const winnerMessage = `${leadingPlayer} wins! Total wins updated.`;
+                alert(winnerMessage);
+                resetGame(); // Reset the game for another round
+            }, 50);
+        }
     }
 }
 
@@ -990,12 +1006,13 @@ function handleCellClick(event, cell) {
     // Only set the text if the cell is empty
     if (!cell.innerText) {
         cell.innerText = currentPlayer; // Set current player's symbol
-        checkCubeWin(); // Check win condition
+        
 
         // Move to the next player
-        currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-        currentPlayer = players[currentPlayerIndex];
+        //currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+        //currentPlayer = players[currentPlayerIndex];
         updateScoreboard();
+        checkCubeWin(); // Check win condition
         console.log("Next turn: Player", currentPlayer);
     }
 }
@@ -1022,11 +1039,12 @@ function handleBlockClick(event) {
         console.log(`Player ${currentPlayer} placed on ${block.id}`);
 
         // Check win condition and update the turn
-        checkCubeWin();
+        
 
         // Switch players
         currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
         currentPlayer = players[currentPlayerIndex];
+        checkCubeWin();
         updateScoreboard();
         console.log("Next turn: Player", currentPlayer);
     }
@@ -1149,3 +1167,9 @@ function initializeCustomMode() {
   
 
   //setupSuperTicTacToe()
+   //TODO: This for some reason doesn't properly delay wins like I was hoping, for some reason even it sets currentplayer to the wins it checks
+
+  function delayedWinMode() {
+    delayedWin = true
+  
+  }
