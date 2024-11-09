@@ -1173,3 +1173,78 @@ function initializeCustomMode() {
     delayedWin = true
   
   }
+
+  const randomBlocksMode = true; // Enable random blocks mode
+const blockCount = 54; // Total number of blocks on the cube (6 faces * 9 blocks per face)
+
+// Function to enable random blocks mode
+function enableRandomBlocksMode() {
+    if (randomBlocksMode) {
+        const randomBlockCount = getRandomInt(2, 5); // Random number of blocks between 2 and 5
+        const selectedBlocks = getRandomBlocks(randomBlockCount);
+
+        selectedBlocks.forEach(block => {
+            block.innerText = '+'; // Set inner text to "*"
+            block.style.fontSize = '24px'; // Match font-size to your .block class
+            block.style.fontWeight = 'bold'; // Match font-weight to your .block class
+            block.style.display = 'flex'; // Use flexbox to center the asterisk
+            block.style.justifyContent = 'center'; // Center horizontally
+            block.style.alignItems = 'center'; // Center vertically
+            block.style.transition = 'background-color 0.3s'; // Ensure transition matches .block
+            block.classList.add('random-block'); // Optional: add a class for styling
+        });
+    }
+}
+
+// Helper function to get random blocks
+function getRandomBlocks(count) {
+    const allBlocks = Array.from(document.querySelectorAll('.block'));
+    const selectedBlocks = [];
+
+    while (selectedBlocks.length < count) {
+        const randomIndex = getRandomInt(0, allBlocks.length - 1);
+        const block = allBlocks[randomIndex];
+
+        // Prevent selecting the same block twice
+        if (!selectedBlocks.includes(block)) {
+            selectedBlocks.push(block);
+        }
+    }
+
+    return selectedBlocks;
+}
+
+// Helper function to generate a random integer between min and max (inclusive)
+function getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+  // Open Modal
+  function openMenu() {
+    document.getElementById('modalOverlay').style.display = 'block';
+    document.getElementById('gameModesModal').style.display = 'block';
+}
+
+// Close Modal
+function closeMenu() {
+    document.getElementById('modalOverlay').style.display = 'none';
+    document.getElementById('gameModesModal').style.display = 'none';
+}
+
+// Select Mode Functionality
+function selectMode(button, mode) {
+    // Remove active class from all buttons
+    document.querySelectorAll('#gameModesModal button').forEach(btn => btn.classList.remove('active'));
+    // Add active class to the clicked button
+    button.classList.add('active');
+    // Call mode initialization based on the selected mode
+    if (mode === 'classic') initializeGame('classic', 2);
+    else if (mode === 'custom') initializeCustomMode();
+    else if (mode === 'scramble') initializeGame('versus', 2);
+    else if (mode === 'delayedWin') delayedWinMode();
+    else if (mode === 'blockade') enableRandomBlocksMode();
+    closeMenu();
+}
+
+// Call this function to activate the random blocks when appropriate (for example, at the start of a turn)
+//enableRandomBlocksMode();
