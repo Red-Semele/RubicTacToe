@@ -6,6 +6,9 @@ let trueBackLayer = ""
 let xTotalWins = 0; // Total wins for player X
 let oTotalWins = 0; // Total wins for player O
 let delayedWin = false
+let winRequirement = 2
+let tickTackToePlayer = ""
+let rubixCubeSolver = ""
 
 const faceColors = {
     front: 'red',
@@ -356,6 +359,7 @@ let playerWins = new Map(); // Map to store each player's win count dynamically
 let players = ["X", "O"]; // Default players, but can be set dynamically
 let currentPlayerIndex = 0;
 let currentPlayer = players[currentPlayerIndex];
+let versusMode = false
 
 // Function to initialize game settings and scoreboard for multiple players
 function initializeGame(mode = "classic", numPlayers = 2) {
@@ -368,6 +372,9 @@ function initializeGame(mode = "classic", numPlayers = 2) {
             players.push(symbols[i]);
         }
     } else if (mode === "versus") {
+        versusMode = true
+        tickTackToePlayer = "X"
+        rubixCubeSolver = "O"
         scrambleCube(); //TODO: Add other difficulties to this
     }
 
@@ -416,6 +423,7 @@ function checkCubeWin() {
         const winners = checkWin(faceBlocks);
 
         if (winners.length > 0) {
+            console.log("WINSTER", winners)
             winners.forEach(winner => {
                 overallWinners.set(winner, (overallWinners.get(winner) || 0) + 1);
             });
@@ -434,10 +442,13 @@ function checkCubeWin() {
                 maxWins = wins;
                 leadingPlayer = player;
                 isDraw = false;
+                console.log("WINNY" + leadingPlayer, maxWins, overallWinners, overallWinners.get(player), player)
+                
             } else if (wins === maxWins) {
                 isDraw = true;
             }
         });
+        
 
         if (isDraw) {
             console.log("It's a draw! Game continues.");
@@ -458,16 +469,63 @@ function checkCubeWin() {
             showWin = true
         }
         if (showWin) {
-            const winnerCount = maxWins;
-            playerWins.set(leadingPlayer, (playerWins.get(leadingPlayer) || 0) + winnerCount);
-            updateScoreboard(); // Refresh the scoreboard
+            if (versusMode === true) {
+                console.log("Win check", maxWins, winRequirement, leadingPlayer, tickTackToePlayer);
+                
+                // Retrieve the scores, defaulting to 0 if undefined
+                const tickTackToeWins = overallWinners.get(tickTackToePlayer) || 0;
+                const rubixCubeSolverWins = overallWinners.get(rubixCubeSolver) || 0;
+                
+                // Calculate the difference
+                const winDifference = tickTackToeWins - rubixCubeSolverWins;
+            
+                console.log(tickTackToeWins, rubixCubeSolverWins);
+            
+                if (winDifference >= winRequirement) {
+                    alert("Ticktacktoer won!");
+                }
+            
 
-            setTimeout(() => {
-                const winnerMessage = `${leadingPlayer} wins! Total wins updated.`;
-                alert(winnerMessage);
-                resetGame(); // Reset the game for another round
-            }, 50);
+            } else {
+                const winnerCount = maxWins;
+                playerWins.set(leadingPlayer, (playerWins.get(leadingPlayer) || 0) + winnerCount);
+                updateScoreboard(); // Refresh the scoreboard
+
+                setTimeout(() => {
+                    const winnerMessage = `${leadingPlayer} wins! Total wins updated.`;
+                    alert(winnerMessage);
+                    resetGame(); // Reset the game for another round
+                }, 200);
+            }
         }
+    }
+}
+
+function checkRubixWin() {
+    const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+    let allFacesSingleColor = true; // Track if all faces are solid in color
+
+    for (const face of faces) {
+        const faceBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
+        
+        // Get the color of the first block in the face
+        const firstBlockColor = faceBlocks[0].style.backgroundColor;
+        
+        // Check if all blocks have the same color as the first block
+        const isSingleColor = faceBlocks.every(block => block.style.backgroundColor === firstBlockColor);
+        
+        if (!isSingleColor) {
+            allFacesSingleColor = false;
+            break; // No need to continue if one face isn't single-colored
+        }
+    }
+
+    // Trigger the win state if all faces are single-colored
+    if (allFacesSingleColor) {
+        setTimeout(() => {
+            alert("Congratulations! The Rubik's cube is solved!");
+            resetGame(); // Reset the game for another round
+        }, 200);
     }
 }
 
@@ -888,6 +946,9 @@ function getRowOrColumn(blockId, direction, skipHistory = false) {
     currentPlayer = players[currentPlayerIndex];
     console.log("Next turn: Player", currentPlayer);
     updateScoreboard()
+    if (versusMode === true) {
+        checkRubixWin()
+    }
     checkCubeWin();
 }
 
@@ -1097,43 +1158,105 @@ initializeGame("classic", 2);
 
 
 function scrambleCube() {
-    const minMoves = 3;
-    const maxMoves = 5;
+    const minMoves = 5;
+    const maxMoves = 9;
     let remainingMoves = Math.floor(Math.random() * (maxMoves - minMoves + 1)) + minMoves;
-    console.log("Moves " + remainingMoves)
+    console.log("Moves " + remainingMoves);
 
-    while (remainingMoves > 0) {
-        // Randomly select one of the three functions (rotateRow, rotateColumn, or rotateSColumn)
-        const moveType = Math.floor(Math.random() * 3); // 0, 1, or 2 for three equal options
-        const index = Math.floor(Math.random() * 3); // Random index between 0 and 2
-        const twistCount = Math.min(Math.floor(Math.random() * 3) + 1, remainingMoves); // 1 to 3 twists, capped at remainingMoves
+    // Track twist counts for rows, columns, and S-columns
+    const twistCounts = {
+        row: [0, 0, 0],
+        column: [0, 0, 0],
+        sColumn: [0, 0, 0]
+    };
 
-        // Apply the selected rotation
-        switch (moveType) {
+    // Helper function to calculate entropy for a face
+    function calculateFaceEntropy(face) {
+        const blocks = Array.from(document.querySelectorAll(`.${face} .block`));
+        const colorSet = new Set(blocks.map(block => block.style.backgroundColor));
+        return colorSet.size;  // More unique colors mean higher entropy
+    }
+
+    // Helper function to calculate total entropy for all faces
+    function calculateTotalEntropy() {
+        const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+        return faces.reduce((totalEntropy, face) => totalEntropy + calculateFaceEntropy(face), 0);
+    }
+
+    // Initial entropy before scrambling
+    let currentEntropy = calculateTotalEntropy();
+
+    // Function to apply a move and check entropy increase
+    function applyMove(type, index, twistCount) {
+        switch (type) {
             case 0:
-                console.log(`Rotating row ${index}, ${twistCount} time(s)`);
-                for (let j = 0; j < twistCount; j++) {
-                    rotateRow(index);
-                }
+                for (let j = 0; j < twistCount; j++) rotateRow(index);
+                twistCounts.row[index] += twistCount; // Track row twists
                 break;
             case 1:
-                console.log(`Rotating column ${index}, ${twistCount} time(s)`);
-                for (let j = 0; j < twistCount; j++) {
-                    rotateColumn(index);
-                }
+                for (let j = 0; j < twistCount; j++) rotateColumn(index);
+                twistCounts.column[index] += twistCount; // Track column twists
                 break;
             case 2:
-                console.log(`Rotating SColumn ${index}, ${twistCount} time(s)`);
-                for (let j = 0; j < twistCount; j++) {
-                    rotateSColumn(index);
-                }
+                for (let j = 0; j < twistCount; j++) rotateSColumn(index);
+                twistCounts.sColumn[index] += twistCount; // Track S-column twists
                 break;
         }
-
-        // Subtract twistCount from the remaining moves
-        remainingMoves -= twistCount;
     }
+
+    // Weighted random choice based on twist frequency
+    function weightedRandomMove() {
+        const moves = [
+            { type: 0, counts: twistCounts.row },
+            { type: 1, counts: twistCounts.column },
+            { type: 2, counts: twistCounts.sColumn }
+        ];
+
+        // Calculate weights for each move
+        const weights = moves.map(move => {
+            const minTwistCount = Math.min(...move.counts);  // Lowest twist count for this move type
+            return move.counts.map(count => minTwistCount + 1 - count).map(weight => Math.max(weight, 1));
+        });
+
+        // Flattened weighted choices (moveType, index) pairs
+        const weightedChoices = [];
+        weights.forEach((moveWeights, moveType) => {
+            moveWeights.forEach((weight, index) => {
+                for (let i = 0; i < weight; i++) {
+                    weightedChoices.push({ moveType, index });
+                }
+            });
+        });
+
+        // Randomly select a move with bias towards untwisted options
+        const choice = weightedChoices[Math.floor(Math.random() * weightedChoices.length)];
+        return choice;
+    }
+
+    while (remainingMoves > 0) {
+        const { moveType, index } = weightedRandomMove();
+        const twistCount = Math.min(Math.floor(Math.random() * 3) + 1, remainingMoves); // 1 to 3 twists, capped at remaining moves
+
+        // Apply the move and measure entropy
+        applyMove(moveType, index, twistCount);
+        const newEntropy = calculateTotalEntropy();
+
+        // Check if entropy increased; if not, revert the move
+        if (newEntropy >= currentEntropy) {
+            currentEntropy = newEntropy; // Keep the move if entropy increased
+            console.log(`Move accepted: ${moveType === 0 ? 'Row' : moveType === 1 ? 'Column' : 'SColumn'} ${index}, ${twistCount} time(s)`);
+            remainingMoves -= twistCount; // Reduce remaining moves
+        } else {
+            // Revert the move by applying the opposite rotations
+            applyMove(moveType, index, twistCount * -1); // Reverse the move
+            console.log(`Move rejected, reverting: ${moveType === 0 ? 'Row' : moveType === 1 ? 'Column' : 'SColumn'} ${index}, ${twistCount} time(s)`);
+        }
+    }
+
+    console.log("Scramble complete with high entropy!");
 }
+
+
 
 function initializeCustomMode() {
     let players = prompt("Enter the number of players for Custom Mode:", "5");
