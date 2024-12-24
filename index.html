@@ -247,12 +247,17 @@
     <!-- Modal Overlay and Game Modes Modal -->
     <div id="modalOverlay" onclick="closeMenu()"></div>
     <div id="gameModesModal">
-        <button onclick="selectMode(this, 'classic')">Regular Mode</button>
-        <button onclick="selectMode(this, 'custom')">3+ player Mode (don't recomend this)</button>
-        <button onclick="selectMode(this, 'scramble')">Scramble Mode</button>
-        <button onclick="selectMode(this, 'delayedWin')">Delayed Win Mode</button>
-        <button onclick="selectMode(this, 'blockade')">Blockade mode</button>
+        <button onclick="toggleMode(this, 'classic')">Regular Mode</button>
+        <button onclick="toggleMode(this, 'custom')">3+ player Mode (don't recommend this)</button>
+        <button onclick="toggleMode(this, 'scramble')">Scramble Mode</button>
+        <button onclick="toggleMode(this, 'delayedWin')">Delayed Win Mode</button>
+        <button onclick="toggleMode(this, 'blockade')">Blockade mode</button>
+        <button onclick="toggleMode(this, 'ai')">AI mode</button>
+        <button onclick="toggleMode(this, 'limited')">Limited signs mode</button>
+        <button onclick="toggleMode(this, 'exponentOverwrite')">Exponent overwrite mode</button>
+        <button onclick="applyModes()">Apply Modes</button>
     </div>
+    
     
    
 

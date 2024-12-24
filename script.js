@@ -9,7 +9,9 @@ let delayedWin = false
 let winRequirement = 2
 let tickTackToePlayer = ""
 let rubixCubeSolver = ""
-
+let xPositions = [];  // Track the positions of 'X' marks involved in the trap
+let dangerZones = [];
+let playerMiddle = false
 const faceColors = {
     front: 'red',
     back: 'blue',
@@ -18,7 +20,17 @@ const faceColors = {
     top: 'orange',
     bottom: 'purple'
 };
-
+let groupedUpResults;
+let groupedDownResults;
+let groupedLeftResults;
+let groupedRightResults;
+let priorityAi = []
+let adjacentData = []
+let mostRecentFace = ""
+let noBreak = false
+let aiMode = false //TODO: In the ai mode, for some reason 1. After the first game on by the ai if it rotates the rows the color's don't update. also if you play from the top it's logic isn't entirely correct.
+let limitedSignsMode = false
+let exponentOverwriteMode = false;
 
 
 
@@ -179,6 +191,7 @@ function updateBlockColors() {
     // Update the color of each block based on its data-color attribute
     allBlocks.forEach(block => {
         const colorLetter = block.getAttribute('data-color'); // Get the color letter from data attribute
+        console.log("Color", colorLetter) //TODO: Found the problem, there seems to be no dat attributes of data-color after a win.
         block.style.backgroundColor = colorMap[colorLetter] || 'transparent'; // Set color
     });
 }
@@ -208,6 +221,10 @@ function saveBackLayerColumn(columnIndex) {
 
 let isSuperTicTacToeMode = ""
 
+function getBlockId(block) {
+    return block.id || block.getAttribute('id') || block.getAttribute('class').match(/#(\w+)/)?.[1];
+}
+
 
 function rotateLayers(layers, type, columnIndex = null, isSuperTicTacToeMode = false) {
     let { frontLayer, backLayer, leftLayer, rightLayer, topLayer, bottomLayer } = layers;
@@ -224,22 +241,32 @@ function rotateLayers(layers, type, columnIndex = null, isSuperTicTacToeMode = f
         const tempLeftText = leftLayer.map(block => block.innerText);
         const tempRightText = rightLayer.map(block => block.innerText);
 
+        const tempFrontHistory = frontLayer.map(block => blockHistory[getBlockId(block)] || []);
+        console.log("testi", tempFrontHistory, blockHistory)
+        const tempBackHistory = backLayer.map(block => blockHistory[getBlockId(block)] || []);
+        const tempLeftHistory = leftLayer.map(block => blockHistory[getBlockId(block)] || []);
+        const tempRightHistory = rightLayer.map(block => blockHistory[getBlockId(block)] || []);
+
         // Rotate the row (front <-> back, left <-> right)
         frontLayer.forEach((block, index) => {
             block.setAttribute('data-color', tempLeftColors[index]); // Set front color to left
             block.innerText = tempLeftText[index]; // Set front text to left text
+            blockHistory[getBlockId(block)] = [...tempLeftHistory[index]];
         });
         leftLayer.forEach((block, index) => {
             block.setAttribute('data-color', tempBackColors[index]); // Set left color to back
             block.innerText = tempBackText[index]; // Set left text to back text
+            blockHistory[getBlockId(block)] = [...tempBackHistory[index]];
         });
         backLayer.forEach((block, index) => {
             block.setAttribute('data-color', tempRightColors[index]); // Set back color to right
             block.innerText = tempRightText[index]; // Set back text to right text
+            blockHistory[getBlockId(block)] = [...tempRightHistory[index]];
         });
         rightLayer.forEach((block, index) => {
             block.setAttribute('data-color', tempFrontColors[index]); // Set right color to front
             block.innerText = tempFrontText[index]; // Set right text to front text
+            blockHistory[getBlockId(block)] = [...tempFrontHistory[index]];
         });
 
         // If super Tic Tac Toe mode is activated, transfer cells
@@ -267,25 +294,34 @@ function rotateLayers(layers, type, columnIndex = null, isSuperTicTacToeMode = f
         const tempTopText = topLayer.map(block => block.innerText);
         const tempBottomText = bottomLayer.map(block => block.innerText);
 
+        const tempFrontHistory = frontLayer.map(block => blockHistory[getBlockId(block)] || []);
+        const tempBackHistory = backLayer.map(block => blockHistory[getBlockId(block)] || []);
+        const tempTopHistory = topLayer.map(block => blockHistory[getBlockId(block)] || []);
+        const tempBottomHistory = bottomLayer.map(block => blockHistory[getBlockId(block)] || []);
+
         // Rotate the column (top <-> bottom, front <-> back)
         frontLayer.forEach((block, index) => {
             block.setAttribute('data-color', tempTopColors[index]); // Set front color to top
             block.innerText = tempTopText[index]; // Set front text to top text
+            blockHistory[getBlockId(block)] = [...tempTopHistory[index]];
         });
 
         backLayer.forEach((block, index) => {
             block.setAttribute('data-color', tempBottomColors[2 - index]); // Set back color to bottom
             block.innerText = tempBottomText[2 - index]; // Set back text to bottom text
+            blockHistory[getBlockId(block)] = [...tempBottomHistory[2 - index]];
         });
 
         topLayer.forEach((block, index) => {
             block.setAttribute('data-color', tempBackColors[2 - index]); // Set top color to back
             block.innerText = tempBackText[2 - index]; // Set top text to back text
+            blockHistory[getBlockId(block)] = [...tempBackHistory[2 - index]];
         });
 
         bottomLayer.forEach((block, index) => {
             block.setAttribute('data-color', tempFrontColors[index]); // Set bottom color to front
             block.innerText = tempFrontText[index]; // Set bottom text to front text
+            blockHistory[getBlockId(block)] = [...tempFrontHistory[index]];
         });
 
         // If super Tic Tac Toe mode is activated, transfer cells
@@ -344,11 +380,15 @@ function checkWin(faceBlocks) {
     const winners = [];
     for (let combination of winningCombinations) {
         const [a, b, c] = combination;
-        // Check if all three blocks in the combination have the same non-empty value
-        if (faceBlocks[a].innerText &&
-            faceBlocks[a].innerText === faceBlocks[b].innerText &&
-            faceBlocks[a].innerText === faceBlocks[c].innerText) {
-            winners.push(faceBlocks[a].innerText); // Store the winning symbol ("X" or "O")
+
+        // Extract symbols without numbers
+        const symbolA = faceBlocks[a].innerText.replace(/\d+/g, "");
+        const symbolB = faceBlocks[b].innerText.replace(/\d+/g, "");
+        const symbolC = faceBlocks[c].innerText.replace(/\d+/g, "");
+
+        // Check if all three blocks in the combination have the same non-empty symbol
+        if (symbolA && symbolA === symbolB && symbolA === symbolC) {
+            winners.push(symbolA); // Store the winning symbol (e.g., "X" or "O")
         }
     }
     return winners; // Return an array of winning symbols
@@ -359,7 +399,7 @@ let playerWins = new Map(); // Map to store each player's win count dynamically
 let players = ["X", "O"]; // Default players, but can be set dynamically
 let currentPlayerIndex = 0;
 let currentPlayer = players[currentPlayerIndex];
-let versusMode = false
+let versusMode = false;
 
 // Function to initialize game settings and scoreboard for multiple players
 function initializeGame(mode = "classic", numPlayers = 2) {
@@ -372,10 +412,10 @@ function initializeGame(mode = "classic", numPlayers = 2) {
             players.push(symbols[i]);
         }
     } else if (mode === "versus") {
-        versusMode = true
-        tickTackToePlayer = "X"
-        rubixCubeSolver = "O"
-        scrambleCube(); //TODO: Add other difficulties to this
+        versusMode = true;
+        tickTackToePlayer = "X";
+        rubixCubeSolver = "O";
+        scrambleCube(); // TODO: Add other difficulties to this
     }
 
     // Initialize win counts for each player in the playerWins Map
@@ -387,6 +427,7 @@ function initializeGame(mode = "classic", numPlayers = 2) {
     console.log(`Game initialized in ${mode} mode with players: ${players.join(", ")}`);
     updateScoreboard(); // Initialize the scoreboard display
 }
+
 
 function updateScoreboard() {
     const scoreboard = document.getElementById('scoreboard');
@@ -535,23 +576,28 @@ function checkRubixWin() {
 
 function resetGame() {
     const faces = {
-        front: 'red',
-        back: 'orange',
-        right: 'green',
-        left: 'blue',
-        top: 'yellow',
-        bottom: 'white'
+
+    front: 'R',
+    back: 'O',
+    right: 'G',
+    left: 'B',
+    top: 'Y',
+    bottom: 'W'
+
     };
 
-    // Loop through each face and reset the blocks
-    for (const face in faces) {
+    for (const face in faces) { 
         const faceBlocks = document.querySelectorAll(`.${face} .block`);
         faceBlocks.forEach(block => {
             block.innerText = ''; // Clear inner text
             block.style.backgroundColor = faces[face]; // Set to the face's color
-            block.setAttribute('data-color', ''); // Optional: Clear color data attribute
+            block.setAttribute('data-color', faces[face]); // Reset to the initial color
         });
     }
+
+    updateBlockColors()
+
+
 
     currentPlayerIndex = 0;
     currentPlayer = players[currentPlayerIndex];
@@ -564,13 +610,6 @@ function resetGame() {
 
 
 
-// Initialize Tic-Tac-Toe with win-check functionality
-function initializeTicTacToe() {
-    const allBlocks = document.querySelectorAll('.block');
-    allBlocks.forEach(block => {
-        block.addEventListener('click', handleBlockClick);
-    });
-}
 
 // Function to rotate the left column
 function rotateLeftColumn() {
@@ -639,31 +678,43 @@ function rotateSColumn(columnIndex) {
     const tempTopText = topLayer.map(block => block.innerText);
     const tempBottomText = bottomLayer.map(block => block.innerText);
 
+    const tempLeftHistory = leftLayer.map(block => blockHistory[getBlockId(block)] || []);
+    const tempBottomHistory = bottomLayer.map(block => blockHistory[getBlockId(block)] || []);
+    const tempRightHistory = rightLayer.map(block => blockHistory[getBlockId(block)] || []);
+    const tempTopHistory = topLayer.map(block => blockHistory[getBlockId(block)] || []);
+
     // Perform the rotation based on the selected column index:
     
     // 1. Move the selected column of the left face to the corresponding row of the bottom face
+        // 1. Move the row from the left face to the opposite column of the bottom face
     for (let i = 0; i < 3; i++) {
         bottomLayer[oppositeColumnIndex * 3 + i].setAttribute('data-color', tempLeftColors[i * 3 + columnIndex]);
         bottomLayer[oppositeColumnIndex * 3 + i].innerText = tempLeftText[i * 3 + columnIndex];
+        blockHistory[getBlockId(bottomLayer[oppositeColumnIndex * 3 + i])] = tempLeftHistory[i * 3 + columnIndex];
+        console.log("TESTIWESTI", )
     }
 
     // 2. Move the row from the bottom face to the opposite column of the right face in reverse order
     for (let i = 0; i < 3; i++) {
         rightLayer[i * 3 + oppositeColumnIndex].setAttribute('data-color', tempBottomColors[oppositeColumnIndex * 3 + (2 - i)]);
         rightLayer[i * 3 + oppositeColumnIndex].innerText = tempBottomText[oppositeColumnIndex * 3 + (2 - i)];
+        blockHistory[getBlockId(rightLayer[i * 3 + oppositeColumnIndex])] = tempBottomHistory[oppositeColumnIndex * 3 + (2 - i)];
     }
 
     // 3. Move the column from the right face to the row of the top face
     for (let i = 0; i < 3; i++) {
         topLayer[columnIndex * 3 + i].setAttribute('data-color', tempRightColors[i * 3 + oppositeColumnIndex]);
         topLayer[columnIndex * 3 + i].innerText = tempRightText[i * 3 + oppositeColumnIndex];
+        blockHistory[getBlockId(topLayer[columnIndex * 3 + i])] = tempRightHistory[i * 3 + oppositeColumnIndex];
     }
 
-   // 4. Move the row from the top face to the selected column of the left face in reverse order
-   for (let i = 0; i < 3; i++) {
-    leftLayer[i * 3 + columnIndex].setAttribute('data-color', tempTopColors[columnIndex * 3 + (2 - i)]);
-    leftLayer[i * 3 + columnIndex].innerText = tempTopText[columnIndex * 3 + (2 - i)];
-}
+    // 4. Move the row from the top face to the selected column of the left face in reverse order
+    for (let i = 0; i < 3; i++) {
+        leftLayer[i * 3 + columnIndex].setAttribute('data-color', tempTopColors[columnIndex * 3 + (2 - i)]);
+        leftLayer[i * 3 + columnIndex].innerText = tempTopText[columnIndex * 3 + (2 - i)];
+        blockHistory[getBlockId(leftLayer[i * 3 + columnIndex])] = tempTopHistory[columnIndex * 3 + (2 - i)];
+    }
+
     // Update colors of blocks
     updateBlockColors();
     if (columnIndex == 2) {
@@ -687,7 +738,7 @@ function rotateSColumn(columnIndex) {
 
 
 // Start the Tic-Tac-Toe game
-initializeTicTacToe();
+
 
 
 function rotateFace(face, direction) {
@@ -785,6 +836,7 @@ function getRowOrColumn(blockId, direction, skipHistory = false) {
             console.log(`Unknown swipe direction: ${direction}`);
             return; // Exit if direction is unknown
     }
+    
 
     if (angle === "horizontal") {
         console.log(`Swiped ${direction} in row ${row} on face ${face}`);
@@ -889,13 +941,14 @@ function getRowOrColumn(blockId, direction, skipHistory = false) {
                     mirroredCol = mirrorRowOrColumn(col);
                     switch (direction) {
                         case 'down':
-                            rotateColumn(mirroredCol);
-                            console.log(`Rotated column ${mirroredCol} on face ${face} clockwise`);
-                            break;
-                        case 'up':
                             for (let i = 0; i < 3; i++) {
                                 rotateColumn(mirroredCol); // Counterclockwise
                             }
+                            
+                            console.log(`Rotated column ${mirroredCol} on face ${face} clockwise`);
+                            break;
+                        case 'up':
+                            rotateColumn(mirroredCol);
                             console.log(`Rotated column ${mirroredCol} on face ${face} counterclockwise`);
                             break;
                     }
@@ -945,11 +998,17 @@ function getRowOrColumn(blockId, direction, skipHistory = false) {
     currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
     currentPlayer = players[currentPlayerIndex];
     console.log("Next turn: Player", currentPlayer);
+    
     updateScoreboard()
     if (versusMode === true) {
         checkRubixWin()
     }
     checkCubeWin();
+    if (aiMode === true) {
+        setTimeout(() => {
+            aiMove();
+        }, 50);
+    }
 }
 
 function undoLastMove() {
@@ -1082,32 +1141,203 @@ function handleCellClick(event, cell) {
 
 
 
-// Track block placements and swipes in history and enable undo
+
+
+// Track each player's moves and exponents
+const playerMoves = players.map(() => []); // Array of arrays to track moves for each player
+const playerExponents = players.map(() => ({ 1: 4, 2: 4, 3: 4, 4: 4 })); // Independent limits for each player
+const blockHistory = {}; // To track the history of signs on each block
+
 function handleBlockClick(event) {
     const block = event.target.closest('.block');
 
-    // Check if the block is empty (to prevent overwriting)
-    if (!block.innerText) {
-        // Place the current player's sign
-        block.innerText = currentPlayer;
+    // Double-click handling
+    if (block.dataset.lastClickTime && Date.now() - block.dataset.lastClickTime < 300) {
+        handleBlockRetake(block);
+        return;
+    }
+    block.dataset.lastClickTime = Date.now();
 
-        // Save this move to history for undo purposes
-        moveHistory.push({
-            type: 'placement',
-            blockId: block.id,
-            player: currentPlayer
-        });
-        console.log(`Player ${currentPlayer} placed on ${block.id}`);
+    if (!exponentOverwriteMode) {
+        // Simplified mode: Add "X" or "O" and skip exponent logic
+        if (!block.innerText) {
+            block.innerText = currentPlayer; // "X" or "O"
+            
+            // Track the move
+            moveHistory.push({
+                type: 'placement',
+                blockId: block.id,
+                player: currentPlayer,
+            });
 
-        // Check win condition and update the turn
+            console.log(`Player ${currentPlayer} placed ${currentPlayer} on ${block.id}`);
+            
+
+         
+        } else {
+            console.log("Invalid move: Block already occupied.");
+        }
+    } else {
+
+        // Original functionality for exponentOverwriteMode = true
+        // Determine the current player's exponent dynamically
+        const currentPlayerExponents = playerExponents[currentPlayerIndex];
+
+        // Check the current state of the block
+        const blockContent = block.innerText;
+        const blockMatch = blockContent.match(/(\D+)(\d+)?/); // Match sign and exponent
+        const blockSign = blockMatch ? blockMatch[1] : '';
+        const blockExponent = blockMatch ? parseInt(blockMatch[2], 10) || 0 : 0;
+
+        let chosenExponent = null;
+
+        // Determine the smallest valid exponent to use
+        for (let exp = blockExponent + 1; exp <= 4; exp++) {
+            if (currentPlayerExponents[exp] > 0) {
+                chosenExponent = exp;
+                break;
+            }
+        }
+
+        if (!blockContent && chosenExponent === null) {
+            // If the block is empty, use the smallest available exponent
+            for (let exp = 1; exp <= 4; exp++) {
+                if (currentPlayerExponents[exp] > 0) {
+                    chosenExponent = exp;
+                    break;
+                }
+            }
+        }
+
+        if (chosenExponent === null) {
+            console.log(`Player ${currentPlayer} has no available exponents to play.`);
+            return;
+        }
+
+        // Handle block placement
+        if (!blockContent || (exponentOverwriteMode && blockSign !== currentPlayer && chosenExponent > blockExponent)) {
+            // Limited Signs Mode: Remove the oldest sign if max signs are exceeded
+            if (limitedSignsMode) {
+                if (playerMoves[currentPlayerIndex].length >= 5) {
+                    const oldestMove = playerMoves[currentPlayerIndex].shift(); // Remove the oldest move
+                    const oldestBlock = document.getElementById(oldestMove.blockId);
+                    oldestBlock.innerText = ''; // Clear the block
+                }
+            }
+
+            // Deduct the chosen exponent for the current player only
+            currentPlayerExponents[chosenExponent]--;
+
+            // Track block history
+            if (!blockHistory[block.id]) blockHistory[block.id] = [];
+            blockHistory[block.id].push(blockContent);
+
+            // Place the current player's sign with the chosen exponent
+            block.innerText = `${currentPlayer}${chosenExponent}`;
+
+            // Save this move to history for undo purposes
+            moveHistory.push({
+                type: 'placement',
+                blockId: block.id,
+                player: currentPlayer,
+            });
+
+            // Save the move for Limited Signs Mode
+            playerMoves[currentPlayerIndex].push({ blockId: block.id });
+
+            console.log(`Player ${currentPlayer} placed ${currentPlayer}${chosenExponent} on ${block.id}`);
         
+        } else {
+            console.log("Invalid move: Block already occupied or overwrite not allowed.");
+        }
+    }
+
+    let direction = block.id.charAt(0); // The letter (e.g., 'f', 'u')
+    let blockNumber = parseInt(block.id.substring(1), 10); // The number (e.g., '3', '1')
+    if (blockNumber === 4) {
+        playerMiddle = true;
+    }
+
+    switch (direction) {
+        case 'u':
+            direction = "up";
+            break;
+        case 'l':
+            direction = "left";
+            break;
+        case 'r':
+            direction = "right";
+            break;
+        case 'd':
+            direction = "down";
+            break;
+        case 'f':
+            direction = "front";
+            break;
+        case 'b':
+            direction = "back";
+            break;
+        default:
+            direction = "Invalid input";
+    }
+
+    console.log(direction, "Direction", groupedLeftResults);
+    console.log("Checking Left Results:");
+    checkDirectionResults(groupedLeftResults, direction, blockNumber);
+
+    console.log("Checking Right Results:");
+    checkDirectionResults(groupedRightResults, direction, blockNumber);
+
+    console.log("Checking Up Results:");
+    checkDirectionResults(groupedUpResults, direction, blockNumber);
+
+    console.log("Checking Down Results:");
+    checkDirectionResults(groupedDownResults, direction, blockNumber);
+
+    console.log(direction, mostRecentFace, "EE");
+    mostRecentFace = direction;
+    console.log("Mostrecent", mostRecentFace)
+
+    // Switch players
+    currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+    currentPlayer = players[currentPlayerIndex];
+    console.log("Next turn: Player", currentPlayer);
+
+    checkCubeWin();
+    updateScoreboard();
+    if (aiMode === true) {
+        setTimeout(() => {
+            aiMove();
+        }, 50);
+    }
+}
+
+
+function handleBlockRetake(block) {
+    const blockContent = block.innerText;
+    const blockMatch = blockContent.match(/(\D+)(\d+)?/); // Match sign and exponent
+    const blockSign = blockMatch ? blockMatch[1] : '';
+    const blockExponent = blockMatch ? parseInt(blockMatch[2], 10) || 0 : 0;
+
+    // Only allow retake if the sign on top belongs to the current player
+    if (blockSign === currentPlayer) {
+        // Add the exponent back to the player's inventory
+        playerExponents[currentPlayerIndex][blockExponent]++;
+
+        // Reveal the previous sign if it exists
+        const previousContent = blockHistory[block.id]?.pop() || '';
+        block.innerText = previousContent;
+
+        console.log(`Player ${currentPlayer} retook their piece from ${block.id}`);
 
         // Switch players
         currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
         currentPlayer = players[currentPlayerIndex];
-        checkCubeWin();
-        updateScoreboard();
         console.log("Next turn: Player", currentPlayer);
+
+        updateScoreboard();
+    } else {
+        console.log("Invalid retake: Block does not belong to the current player.");
     }
 }
 
@@ -1123,6 +1353,8 @@ document.querySelectorAll('.block').forEach(element => {
 document.querySelectorAll('.cell').forEach(cell => {
     cell.addEventListener('click', (event) => handleCellClick(event, cell)); // Handle clicks directly on cells
 });
+
+
 
 function transferCells(sourceLayer, targetLayer) {
     sourceLayer.forEach((sourceBlock, index) => {
@@ -1354,20 +1586,868 @@ function closeMenu() {
     document.getElementById('gameModesModal').style.display = 'none';
 }
 
-// Select Mode Functionality
-function selectMode(button, mode) {
-    // Remove active class from all buttons
-    document.querySelectorAll('#gameModesModal button').forEach(btn => btn.classList.remove('active'));
-    // Add active class to the clicked button
-    button.classList.add('active');
-    // Call mode initialization based on the selected mode
-    if (mode === 'classic') initializeGame('classic', 2);
-    else if (mode === 'custom') initializeCustomMode();
-    else if (mode === 'scramble') initializeGame('versus', 2);
-    else if (mode === 'delayedWin') delayedWinMode();
-    else if (mode === 'blockade') enableRandomBlocksMode();
+let activeModes = new Set();
+
+function toggleMode(button, mode) {
+    // Toggle active class and update activeModes set
+    if (activeModes.has(mode)) {
+        activeModes.delete(mode);
+        button.classList.remove('active');
+    } else {
+        activeModes.add(mode);
+        button.classList.add('active');
+    }
+}
+
+function applyModes() {
+    // Apply all selected modes
+    activeModes.forEach(mode => {
+        if (mode === 'classic') initializeGame('classic', 2);
+        else if (mode === 'custom') initializeCustomMode();
+        else if (mode === 'scramble') initializeGame('versus', 2);
+        else if (mode === 'delayedWin') delayedWinMode();
+        else if (mode === 'blockade') enableRandomBlocksMode();
+        else if (mode === 'ai') enableAiMode();
+        else if (mode === 'limited') initializeLimitedSigns();
+        else if (mode === 'exponentOverwrite') initializeExponentOverwriteMode();
+    });
     closeMenu();
 }
 
+
 // Call this function to activate the random blocks when appropriate (for example, at the start of a turn)
 //enableRandomBlocksMode();
+
+
+//Create an AI versus mode, where the AI can choose from the best moves to first block a player win if needed, and secondly to win itself.
+function enableAiMode() {
+    aiMode = true
+}
+
+
+function aiMove() {
+    const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+    let bestFace = null;
+    let bestMove = -1;
+
+    const aiPlayer = 'O';
+    const humanPlayer = 'X';
+
+    function isWin(board, player) {
+        const winPatterns = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8],
+            [0, 3, 6], [1, 4, 7], [2, 5, 8],
+            [0, 4, 8], [2, 4, 6]
+        ];
+        return winPatterns.some(pattern =>
+            pattern.every(index => board[index] === player)
+        );
+    }
+
+  
+
+    function getAvailableMoves(board) {
+        return board.map((cell, index) => (cell === null ? index : null)).filter(index => index !== null);
+    }
+
+    function minimax(board, depth, isMaximizing) {
+        if (isWin(board, aiPlayer)) return 10 - depth;
+        if (isWin(board, humanPlayer)) return depth - 10;
+        if (isDraw(board)) return 0;
+
+        const availableMoves = getAvailableMoves(board);
+        if (isMaximizing) {
+            let maxEval = -Infinity;
+            for (const move of availableMoves) {
+                board[move] = aiPlayer;
+                const evaluation = minimax(board, depth + 1, false);
+                board[move] = null;
+                maxEval = Math.max(maxEval, evaluation);
+            }
+            return maxEval;
+        } else {
+            let minEval = Infinity;
+            for (const move of availableMoves) {
+                board[move] = humanPlayer;
+                const evaluation = minimax(board, depth + 1, true);
+                board[move] = null;
+                minEval = Math.min(minEval, evaluation);
+            }
+            return minEval;
+        }
+    }
+
+    function isDraw(board) {
+        return board.every(cell => cell !== null);
+    }
+
+    function minTurnsToWin(board, player) {
+        const winPatterns = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8],
+            [0, 3, 6], [1, 4, 7], [2, 5, 8],
+            [0, 4, 8], [2, 4, 6]
+        ];
+
+        let minTurns = Infinity;
+        let winningPattern = [];
+
+        for (const pattern of winPatterns) {
+            const playerMoves = pattern.filter(index => board[index] === player).length;
+            const emptySpaces = pattern.filter(index => board[index] === null).length;
+
+            if (playerMoves + emptySpaces === 3) {
+                if (emptySpaces < minTurns) {
+                    minTurns = emptySpaces;
+                    winningPattern = pattern;
+                }
+            }
+        }
+
+        return minTurns === Infinity ? { turns: -1, pattern: [] } : { turns: minTurns, pattern: winningPattern };
+    }
+
+    function evaluateFacePriority() {
+        let priorityList = [];
+        const middleIndex = Math.floor(faces[0].length / 2); // Assuming all faces have the same board size
+        const middleSquare = faces[0][middleIndex];
+        const aiFirstMove = faces.every(face => 
+            Array.from(document.querySelectorAll(`.${face} .block`)).every(block => !block.innerText)
+        );
+    
+        // If it's the AI's first move, play in the middle if it's free
+        if (aiFirstMove && middleSquare === null) {
+            return { face: faces[0], move: middleIndex }; 
+        }
+    
+        for (const face of faces) {
+            const faceBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
+            const board = faceBlocks.map(block => block.innerText || null);
+    
+            const aiResult = minTurnsToWin(board, aiPlayer);
+            const humanResult = minTurnsToWin(board, humanPlayer);
+    
+            const middleIndex = Math.floor(board.length / 2); // Assuming the board has a single middle square
+            const cornerIndices = [0, board.length - 1, Math.sqrt(board.length) - 1, board.length - Math.sqrt(board.length)];
+    
+            // Check if the player played in a corner and the middle is empty
+            if (cornerIndices.some(index => board[index] === humanPlayer) && board[middleIndex] === null) {
+                // Prioritize the middle if it's empty
+                console.log("Special")
+                return { face, move: middleIndex };
+            }
+    
+            if (playerMiddle === true) {
+                // Check if the player can win in one move
+                if (humanResult.turns === 1) {
+                    // Block the player's winning move
+                    playerMiddle = false; // Reset the flag
+                    console.log("Special")
+                    return { face, move: humanResult.pattern.find(index => board[index] === null) };
+                }
+    
+                // Otherwise, check for corners
+                playerMiddle = false; // Reset the flag
+                for (const cornerIndex of cornerIndices) {
+                    if (board[cornerIndex] === null) {
+                        console.log("Special")
+                        return { face, move: cornerIndex }; // Pick the first available corner
+                    }
+                }
+            }
+    
+            // Check for future winning moves (both 1-turn and 2-turn)
+            let blockingMove = null;
+
+            if (aiResult.turns === 1) {
+                // AI can win immediately
+                return { face, move: aiResult.pattern.find(index => board[index] === null) };
+            }
+            
+            if (humanResult.turns === 1) {
+                // Block immediate winning move
+                console.log("Special")
+                blockingMove = humanResult.pattern.find(index => board[index] === null);
+            } else if (humanResult.turns === 2) {
+                // Check for future winning move (2 turns)
+                console.log("Special")
+                blockingMove = humanResult.pattern.find(index => board[index] === null);
+            }
+    
+            // If we find a blocking move (either 1-turn or 2-turn threat), block it
+            if (blockingMove !== null) {
+                console.log("Special")
+                return { face, move: blockingMove };
+            }
+    
+            // Check if the AI can win in the next move
+           
+    
+            if (humanResult.turns === 1) {
+                // Human can win in one move, block it
+                return { face, move: humanResult.pattern.find(index => board[index] === null) };
+            }
+    
+            // If the human has a 2-turn winning opportunity, prioritize blocking that
+            if (humanResult.turns === 2) {
+                // Human can win in two moves, consider blocking
+                priorityList.push({
+                    face,
+                    move: humanResult.pattern.find(index => board[index] === null),
+                    priority: 2
+                });
+            }
+    
+            // If the AI has a 2-turn winning opportunity, prioritize setting up that win
+            if (aiResult.turns === 2) {
+                // AI can win in two moves, consider setting up
+                priorityList.push({
+                    face,
+                    move: aiResult.pattern.find(index => board[index] === null),
+                    priority: 3
+                });
+            }
+        }
+    
+        // Sort by priority (higher priority first)
+        priorityList.sort((a, b) => b.priority - a.priority);
+    
+        // Return the highest priority move
+        return priorityList.length > 0 ? priorityList[0] : null;
+    }
+    
+    
+    
+    
+
+    function checkDrawState() {
+        for (const face of faces) {
+            const faceBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
+            const board = faceBlocks.map(block => block.innerText || null);
+    
+            const filledTiles = board.filter(cell => cell !== null).length;
+            const hasNoWins = !isWin(board, aiPlayer) && !isWin(board, humanPlayer);
+    
+            if (filledTiles >= 8 && hasNoWins) {
+                console.log("DRAW DETECTED PUG", face)
+                // Check for valid square patterns first
+                const validSquares = checkSquarePattern(board);
+                if (validSquares.length > 0) {
+                    validSquares.forEach(pattern => {
+                        console.log(`Square pattern with two X's and two O's detected on face: ${face} | Pattern: ${pattern.join(', ')} | ${dangerZone}`);
+                    });
+                }
+                dangerZones.forEach((zone) => {
+                    const dangerZone = zone.dangerZone;
+                    const minIndex = Math.min(...dangerZone); // Find the smallest number
+                    const maxIndex = Math.max(...dangerZone); // Find the biggest number
+                    const difference = maxIndex - minIndex;
+                
+                    if (difference === 1) {
+                        // Horizontal danger zone
+                        console.log(dangerZone, face, 'Horizontal Danger Zone');
+                
+                        // Maps to group results by regularFace and newFace
+                        const leftResultsGrouped = new Map();
+                        const rightResultsGrouped = new Map();
+                
+                        dangerZone.forEach((number) => {
+                            const leftResult = getAdjacentFaceAndNumber(face, "left", number);
+                            const rightResult = getAdjacentFaceAndNumber(face, "right", number);
+                
+                            // Group left results by regularFace and newFace
+                            const leftKey = `${face}_${leftResult.newFace}`;
+                            if (!leftResultsGrouped.has(leftKey)) {
+                                leftResultsGrouped.set(leftKey, {
+                                    regularFace: face,
+                                    newFace: leftResult.newFace,
+                                    numbers: []
+                                });
+                            }
+                            leftResultsGrouped.get(leftKey).numbers.push(number);
+                
+                            // Group right results by regularFace and newFace
+                            const rightKey = `${face}_${rightResult.newFace}`;
+                            if (!rightResultsGrouped.has(rightKey)) {
+                                rightResultsGrouped.set(rightKey, {
+                                    regularFace: face,
+                                    newFace: rightResult.newFace,
+                                    numbers: []
+                                });
+                            }
+                            rightResultsGrouped.get(rightKey).numbers.push(number);
+                
+                            console.log(leftResult, `Processed number ${number} to the left`);
+                            console.log(rightResult, `Processed number ${number} to the right`);
+                        });
+                
+                        groupedLeftResults = Array.from(leftResultsGrouped.values());
+                        groupedRightResults = Array.from(rightResultsGrouped.values());
+                
+                        console.log("Grouped Left Results:", groupedLeftResults);
+                        console.log("Grouped Right Results:", groupedRightResults);
+                
+                    } else {
+                        // Vertical danger zone
+                        console.log(dangerZone, face, 'Vertical Danger Zone');
+                
+                        // Maps to group results by regularFace and newFace
+                        const upResultsGrouped = new Map();
+                        const downResultsGrouped = new Map();
+                
+                        dangerZone.forEach((number) => {
+                            const upResult = getAdjacentFaceAndNumber(face, "up", number);
+                            const downResult = getAdjacentFaceAndNumber(face, "down", number);
+                
+                            // Group up results by regularFace and newFace
+                            const upKey = `${face}_${upResult.newFace}`;
+                            if (!upResultsGrouped.has(upKey)) {
+                                upResultsGrouped.set(upKey, {
+                                    regularFace: face,
+                                    newFace: upResult.newFace,
+                                    numbers: []
+                                });
+                            }
+                            upResultsGrouped.get(upKey).numbers.push(number);
+                
+                            // Group down results by regularFace and newFace
+                            const downKey = `${face}_${downResult.newFace}`;
+                            if (!downResultsGrouped.has(downKey)) {
+                                downResultsGrouped.set(downKey, {
+                                    regularFace: face,
+                                    newFace: downResult.newFace,
+                                    numbers: []
+                                });
+                            }
+                            downResultsGrouped.get(downKey).numbers.push(number);
+                
+                            console.log(upResult, `Processed number ${number} to the up`);
+                            console.log(downResult, `Processed number ${number} to the down`);
+                        });
+                
+                        groupedUpResults = Array.from(upResultsGrouped.values());
+                        groupedDownResults = Array.from(downResultsGrouped.values());
+                        
+                
+                        console.log("Grouped Up Results:", groupedUpResults);
+                        console.log("Grouped Down Results:", groupedDownResults);
+                    }
+                });
+                
+                
+    
+                // Check for diagonals with 2 O's and suggest a block to change
+                const diagonalChange = checkDiagonalForTwoOs(board);
+                console.log(diagonalChange, "diagon ally")
+                if (diagonalChange !== null) {
+                    adjacentData = [];
+
+                    console.log(`On face ${face}, change block ${diagonalChange} to O to create 3 O's in a diagonal.`);
+                    
+                    // Call getAdjacentFaceAndNumber and store the result in the adjacentData array
+                    adjacentData.push(getAdjacentFaceAndNumber(face, "up", diagonalChange));
+                    adjacentData.push(getAdjacentFaceAndNumber(face, "down", diagonalChange));
+                    adjacentData.push(getAdjacentFaceAndNumber(face, "left", diagonalChange));
+                    adjacentData.push(getAdjacentFaceAndNumber(face, "right", diagonalChange));
+                    
+                    // Log the stored data
+                    console.log("Adjacent Data:", adjacentData);
+
+                    
+                    //TODO: this doesn't seem to always work? experiment a bit with the numbers
+                } else {
+                    console.log(`Draw detected on face: ${face}`);
+                }
+    
+                return true; // Log and handle draw state here if needed
+                //TODO: This is a slight problem since if I have 2 draws it doesn't properly register all the time since it gets returned.
+            }
+        }
+        return false;
+    }
+
+    
+
+    function checkDiagonalForTwoOs(board) {
+        const diagonalPatterns = [
+            [0, 4, 8], // Top-left to bottom-right
+            [2, 4, 6]  // Top-right to bottom-left
+        ];
+    
+        for (const pattern of diagonalPatterns) {
+            // Get the values of the diagonal cells
+            const values = pattern.map(index => board[index]);
+            const oCount = values.filter(value => value === 'O').length;
+    
+            // Check if the diagonal has exactly 2 O's
+            if (oCount === 2) {
+                // Find the cell in the pattern that does NOT contain an 'O'
+                const nonOIndex = pattern.find(index => board[index] !== 'O');
+                if (nonOIndex !== undefined) {
+                    console.log(`Diagonal pattern detected with 2 O's. Block to change: ${nonOIndex}`);
+                    return nonOIndex; // Return the index of the block to change
+                }
+            }
+        }
+    
+        console.log("No valid diagonal with 2 O's found."); //If none are found then just play in the dangerzone instead, if there is one (there kind of has to be atleast one, right?)
+        return null; // No valid diagonal found
+    }
+    
+    
+    
+    
+    function checkSquarePattern(board) {
+        const squarePatterns = [
+            [0, 1, 3, 4], // Top-left square
+            [1, 2, 4, 5], // Top-right square
+            [3, 4, 6, 7], // Bottom-left square
+            [4, 5, 7, 8]  // Bottom-right square
+        ];
+    
+        const validSquares = [];
+        dangerZones = [];
+    
+        for (const pattern of squarePatterns) {
+            const values = pattern.map(index => board[index]);
+            const xCount = values.filter(value => value === 'X').length;
+            const oCount = values.filter(value => value === 'O').length;
+    
+            // A valid square must have exactly 2 X's and 2 O's
+            if (xCount === 2 && oCount === 2) {
+                // Check for O's adjacency in the square
+                const [a, b, c, d] = pattern;
+    
+                const validOAdjacency = (
+                    // Horizontal adjacency (0, 1 or 2, 3)
+                    (values[0] === 'O' && values[1] === 'O') ||
+                    (values[1] === 'O' && values[2] === 'O') ||
+                    (values[2] === 'O' && values[3] === 'O') ||
+                    // Vertical adjacency (0, 3 or 1, 4)
+                    (values[0] === 'O' && values[2] === 'O') ||
+                    (values[1] === 'O' && values[3] === 'O')
+                );
+    
+                if (validOAdjacency) {
+                    validSquares.push(pattern); // Add to the list of valid squares
+    
+                    // Determine if O's are horizontally or vertically adjacent
+                    if (values[0] === 'O' && values[1] === 'O') {
+                        // O's are horizontally aligned (0, 1), danger zone will be vertical
+                        const dangerZone = calculateDangerZone(pattern, 'horizontal');
+                        dangerZones.push({ square: pattern, dangerZone });
+                    } else if (values[1] === 'O' && values[2] === 'O') {
+                        // O's are horizontally aligned (1, 2), danger zone will be vertical
+                        const dangerZone = calculateDangerZone(pattern, 'horizontal');
+                        dangerZones.push({ square: pattern, dangerZone });
+                    } else if (values[0] === 'O' && values[2] === 'O') {
+                        // O's are vertically aligned (0, 3), danger zone will be horizontal
+                        const dangerZone = calculateDangerZone(pattern, 'vertical');
+                        dangerZones.push({ square: pattern, dangerZone });
+                    } else if (values[1] === 'O' && values[3] === 'O') {
+                        // O's are vertically aligned (1, 4), danger zone will be horizontal
+                        const dangerZone = calculateDangerZone(pattern, 'vertical');
+                        dangerZones.push({ square: pattern, dangerZone });
+                    }
+                }
+            }
+        }
+    
+        if (validSquares.length > 0) {
+            console.log(`Valid square patterns detected: ${validSquares.map(square => square.join(', ')).join(' | ')}`);
+            console.log(`Danger zones detected: ${dangerZones.map(zone => `Square: [${zone.square.join(', ')}], Danger zone: [${zone.dangerZone.join(', ')}]`).join(' | ')}`);
+            return { validSquares, dangerZones };
+        }
+    
+        return { validSquares: [], dangerZones: [] };
+    }
+    
+    // Helper function to calculate the danger zone based on square's O-adjacency
+    function calculateDangerZone(pattern, direction) {
+        const [a, b, c, d] = pattern;
+    
+        let dangerZone = [];
+    
+        // If O's are horizontal, danger zone will be vertical (up or down)
+        if (direction === 'horizontal') {
+            const minIndex = Math.min(a, b, c, d); // Get the minimum index in the square pattern
+    
+            // Danger zone vertically adjacent to the square (up or down)
+            switch (minIndex) {
+                case 0:
+                    // Move downwards (6, 7 for pattern [0, 1, 3, 4])
+                    dangerZone = [2, 5];
+                    break;
+                case 1:
+                    // Move downwards (5, 8 for pattern [1, 2, 4, 5])
+                    dangerZone = [0, 3];
+                    break;
+                case 3:
+                    dangerZone = [5, 8];
+                    break;
+                case 4:
+                    // Move downwards (8 for pattern [4, 5, 7, 8])
+                    dangerZone = [3, 6];
+                    break;
+            }
+            
+        }
+    
+        // If O's are vertical, danger zone will be horizontal (left or right)
+        if (direction === 'vertical') {
+            const minIndex = Math.min(a, b, c, d); // Get the minimum index in the square pattern
+    
+            // Danger zone horizontally adjacent to the square (left or right)
+            switch (minIndex) {
+                case 0:
+                    // Move downwards (6, 7 for pattern [0, 1, 3, 4])
+                    dangerZone = [6, 7];
+                    break;
+                case 1:
+                    // Move downwards (5, 8 for pattern [1, 2, 4, 5])
+                    dangerZone = [7, 8];
+                    break;
+                case 3:
+                    dangerZone = [0, 1];
+                    break;
+                case 4:
+                    // Move downwards (8 for pattern [4, 5, 7, 8])
+                    dangerZone = [1, 2];
+                    break;
+            }
+        }
+    
+        return dangerZone;
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+   
+
+    if (checkDrawState()) {
+        noBreak = false;
+        console.log("DRAWOO");
+        // Handle the draw state if necessary
+        const faceBlocksMostRecentFace = Array.from(document.querySelectorAll(`.${mostRecentFace} .block`)); //TODO: I probably need to remove the dot, but that doesn't fix things fully.
+        const mostRecentBoard = faceBlocksMostRecentFace.map(block => block.innerText || null);
+    
+        if (priorityAi.length > 0) {
+            console.log("Ai needs to make an immediate move to block dangerzone");
+    
+            // For each matched result, use the otherNumber and direction to update the move
+            priorityAi.forEach((item, index) => {
+                const { direction, otherNumber } = item;
+    
+                // Select the face blocks based on the direction
+                const faceBlocks = Array.from(document.querySelectorAll(`.${direction} .block`));
+    
+                // Ensure that otherNumber is within the bounds of the faceBlocks array
+                if (otherNumber >= 0 && otherNumber < faceBlocks.length) {
+                    // Directly access the block and set its innerText to "O"
+                    faceBlocks[otherNumber].innerText = "O";
+                    console.log(`Placed "O" on the block with index ${otherNumber}`);
+                } else {
+                    console.log("Invalid otherNumber, it is out of bounds.", otherNumber);
+                }
+    
+                // After making the move, remove the item from the priorityAi array
+                priorityAi.splice(index, 1);
+                console.log(`Removed priority move for ${direction} and ${otherNumber} from the array.`);
+    
+                if (priorityAi.length <= 0) {
+                    console.log("No danger zone blocks needed anymore");
+                }
+                // Exit the loop after the first valid AI move is made
+                return; // Add return to break out of the forEach loop
+            });
+        } else if (minTurnsToWin(mostRecentBoard, humanPlayer).turns >= 0 && minTurnsToWin(mostRecentBoard, humanPlayer).turns < 2) {
+            console.log("TESt, should block player.");
+            noBreak = true;
+    
+        } else {
+            console.log("Set up unblockable win");
+    
+            // Flag to stop after making one valid move
+            let moveMade = false;
+    
+            adjacentData.forEach(item => {
+                if (moveMade) return;  // If a move is already made, break out of the loop
+                
+                const { newFace, newNumber } = item;
+    
+                // Select all blocks on the specified face
+                const faceBlocks = Array.from(document.querySelectorAll(`.${newFace} .block`));
+                const board = faceBlocks.map(block => block.innerText || null);
+                console.log(minTurnsToWin(board, humanPlayer).turns, "turns to win player");
+    
+                // Ensure newNumber is within the valid range for the face (0 to 8)
+                if (newNumber >= 0 && newNumber < faceBlocks.length) {
+                    // Get the block at the newNumber index
+                    const targetBlock = faceBlocks[newNumber];
+    
+                    // Check if the block is empty (i.e., has no inner text)
+                    if (!targetBlock.innerText.trim()) {
+                        // If the block is empty, set its inner text to "O"
+                        setTimeout(() => {
+                            targetBlock.innerText = "O";
+                        }, 50);
+                        
+                        console.log("AI move II");
+                        console.log(`Set "O" on the block with index ${newNumber} on face ${newFace}`, getFaceRelation(newFace, mostRecentFace), targetBlock.id); //TODO: When played on the top it put's it in the correct space, just it doesn't rotate it right, it rotates it to the opposite direction/.
+                        setTimeout(() => {
+                            getRowOrColumn(targetBlock.id, getFaceRelation(newFace, mostRecentFace), skipHistory = false); //TODO: For some reason after rotating a row or layer with this the cube doesn't change color properly anymore.
+                        }, 50);
+                        
+    
+                        // After making the move, stop further checks
+                        moveMade = true;  // Mark that a move has been made
+                    } else {
+                        console.log(`Block with index ${newNumber} on face ${newFace} is already occupied.`);
+                    }
+                } else {
+                    console.log(`Invalid block index ${newNumber} for face ${newFace}.`);
+                }
+            });
+        }
+    
+        if (noBreak === false) {
+            // Update the current player and handle the next player's turn
+            console.log("No break");
+            currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+            currentPlayer = players[currentPlayerIndex];
+            return;
+        }
+    }
+    
+    
+      
+
+    const priorityMove = evaluateFacePriority();
+    console.log(priorityMove, "priority")
+
+    if (priorityMove) {
+        // Make the move based on priority evaluation
+        const faceBlocks = Array.from(document.querySelectorAll(`.${priorityMove.face} .block`));
+        faceBlocks[priorityMove.move].innerText = aiPlayer;
+        console.log("Ai move O")
+    } else {
+        console.log("No priority")
+        // No immediate priorities; fallback to Minimax
+        let bestScore = -Infinity;
+
+        for (const face of faces) {
+            const faceBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
+            const board = faceBlocks.map(block => block.innerText || null);
+            const availableMoves = getAvailableMoves(board);
+
+            for (const move of availableMoves) {
+                board[move] = aiPlayer; // Simulate AI move
+                const score = minimax(board, 0, false); //TODO: Minimax function is lost, try to find it in an old version, because right now it's broken
+                board[move] = null; // Undo move
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestFace = face;
+                    bestMove = move;
+                }
+            }
+        }
+
+        if (bestFace !== null && bestMove !== -1) {
+            const faceBlocks = Array.from(document.querySelectorAll(`.${bestFace} .block`));
+            faceBlocks[bestMove].innerText = aiPlayer;
+            console.log("Ai move II")
+        }
+    }
+
+    // Switch to the next player
+    checkDrawState()
+    currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+    currentPlayer = players[currentPlayerIndex];
+}
+
+function getAdjacentFaceAndNumber(currentFace, direction, number) {
+    if (currentFace === "bottom") {
+        currentFace = "down"
+    } else if (currentFace === "top") {
+        currentFace = "up"
+    }
+    // Define the cube's adjacency rules
+    const cubeMap = {
+        front: { up: "up", down: "down", left: "left", right: "right" },
+        back: { up: "up", down: "down", left: "right", right: "left" },
+        left: { up: "up", down: "down", left: "back", right: "front" },
+        right: { up: "up", down: "down", left: "front", right: "back" },
+        up: { up: "back", down: "front", left: "left", right: "right" },
+        down: { up: "front", down: "back", left: "left", right: "right" }
+    };
+
+    // Get the new face
+    const newFace = cubeMap[currentFace]?.[direction];
+
+    if (!newFace) {
+        throw new Error("Invalid face or direction");
+    }
+
+    // Define the transformation logic for the number
+    let newNumber;
+    switch (true) {
+        case (["front", "left", "right", "back"].includes(currentFace) &&
+              ["front", "left", "right", "back"].includes(newFace)):
+                // If both faces are Front, Left, Right, or Back, carry over the number
+                newNumber = number;
+                break;
+        case (["front", "up", ].includes(currentFace) &&
+              ["front", "up"].includes(newFace)):
+                // cary over the same number
+                newNumber = number;
+                break;
+        case (["back", "up","down" ].includes(currentFace) &&
+            ["back", "up", "down"].includes(newFace)):
+            // cary over the same number
+            newNumber = (8 - number);
+            break;
+
+        case (["left", "right", "down", "up"].includes(currentFace) &&
+        ["left", "right", "down", "up"].includes(newFace)):
+            if (direction === "up" || direction == "left") {
+                // Handle the "up" direction
+                newNumber = transformNumber(number, "row", "col", false);
+                console.log("TEST", newNumber)
+                break;
+            } else if (direction === "down" || direction == "right") {
+                // Handle the "down" direction
+                newNumber = transformNumber(number, "col", "row", false);
+                console.log("TEST", newNumber)
+                break;
+            } 
+       
+        default:
+            newNumber = (number + 1) % 9; // Default transformation
+            console.log("ERROR", newNumber, currentFace, newFace, direction) //TODO: Front down down still triggers this, fix that.
+    }
+    console.log("OLD NUMBER", number, "NEW NUMBER", newNumber)
+    return { newFace, newNumber };
+}
+
+// Example usage
+
+console.log(getAdjacentFaceAndNumber("left", "down", 8)); // { newFace: "front", newNumber: 4 }
+
+
+
+
+function transformNumber(number, swapSource, swapTarget, mirror = false) {
+    const grid = [
+        [0, 1, 2], // Row 0
+        [3, 4, 5], // Row 1
+        [6, 7, 8]  // Row 2
+    ];
+
+    const flatToGrid = (num) => [Math.floor(num / 3), num % 3]; // Get row and col from number
+    const gridToFlat = (row, col) => row * 3 + col;             // Convert row and col back to flat index
+
+    const [row, col] = flatToGrid(number);
+
+    if (swapSource === "row") {
+        const targetRow = swapTarget === "row" ? col : 2 - col;
+        const targetCol = swapTarget === "col" ? row : row;
+        return gridToFlat(mirror ? 2 - targetRow : targetRow, targetCol);
+    }
+
+    if (swapSource === "col") {
+        const targetRow = swapTarget === "row" ? col : col;
+        const targetCol = swapTarget === "col" ? row : 2 - row;
+        return gridToFlat(targetRow, mirror ? 2 - targetCol : targetCol);
+    }
+
+    return number; // Default: no transformation
+}
+
+console.log(transformNumber(2, "row", "col", false));
+console.log(transformNumber(5, "row", "col", false));
+console.log(transformNumber(4, "row", "col", false));
+console.log(transformNumber(1, "row", "col", false));
+console.log(transformNumber(6, "row", "col", true));
+console.log(transformNumber(6, "row", "col", false));
+console.log(transformNumber(2, "col", "row", false));
+console.log(transformNumber(8, "col", "row", false));
+//TODO: This seems to work perfect for L->U->R->D (if you go up, then first use row, then column, if you go down, first use col and then row)
+//TEST this extensively and then implement it aswell
+
+
+
+function checkDirectionResults(groupedResults, direction, blockNumber) {
+    if (groupedResults && direction !== "Invalid input") {
+      // Filter groupedResults for entries with matching newFace (direction)
+      const matchingResults = groupedResults.filter(result => {
+        console.log(`Checking if result.newFace: ${result.newFace.trim()} matches direction: ${direction.trim()}`);
+        return result.newFace.trim() === direction.trim();
+      });
+  
+      console.log("Matching Results:", matchingResults);
+  
+      // Check if any of the filtered results contains the blockNumber
+      const isNumberInResults = matchingResults.some(result => result.numbers.includes(blockNumber));
+      console.log("Is Number in Results:", isNumberInResults);
+  
+      // If a matching result is found
+      if (isNumberInResults) {
+        // Loop through the matching results and check for the blockNumber
+        matchingResults.forEach(result => {
+          // Check if the blockNumber is one of the numbers
+          if (result.numbers.includes(blockNumber)) {
+            const otherNumber = result.numbers.find(num => num !== blockNumber);
+            console.log(`The number ${blockNumber} is in a dangerzone and was chosen. The other number is ${otherNumber}.`);
+            priorityAi.push({ direction: direction, otherNumber: otherNumber });
+          }
+        });
+      } else {
+        console.log(`The number ${blockNumber} is not in a dangerzone here.`, groupedResults, matchingResults, isNumberInResults);
+      }
+    } else {
+      // Handle the case where groupedResults is undefined or direction is invalid
+      if (!groupedResults) {
+        console.log("groupedResults is undefined or not available.");
+      } else {
+        console.log("Invalid direction provided, cannot proceed.");
+      }
+    }
+  }
+
+  function getFaceRelation(face1, face2) {
+    const cubeMap = {
+        front: { up: "up", down: "down", left: "left", right: "right" },
+        back: { up: "up", down: "down", left: "right", right: "left" }, 
+        left: { up: "up", down: "down", left: "back", right: "front" },
+        right: { up: "up", down: "down", left: "front", right: "back" },
+        up: { up: "back", down: "front", left: "left", right: "right" },
+        down: { up: "front", down: "back", left: "left", right: "right" }
+    };
+    // Check if the input faces are valid
+    if (!(face1 in cubeMap) || !(face2 in cubeMap)) {
+        return "Invalid face";
+    }
+
+    // Iterate through the directions of the first face and check if face2 matches any neighbor
+    for (const direction in cubeMap[face1]) {
+        if (cubeMap[face1][direction] === face2) {
+            return direction; // Return the direction relative to face1
+        }
+    }
+
+    // If no match is found, the faces are not adjacent
+    return "faces are not adjacent";
+}
+function initializeLimitedSigns() {
+    limitedSignsMode = true; //TODO: This one works, make it it's own mode
+}
+function initializeExponentOverwriteMode() {
+    exponentOverwriteMode = true
+}
