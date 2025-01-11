@@ -31,6 +31,7 @@ let noBreak = false
 let aiMode = false //TODO: In the ai mode, for some reason 1. After the first game on by the ai if it rotates the rows the color's don't update. also if you play from the top it's logic isn't entirely correct.
 let limitedSignsMode = false
 let exponentOverwriteMode = false;
+const rotationData = [];
 
 
 
@@ -191,7 +192,6 @@ function updateBlockColors() {
     // Update the color of each block based on its data-color attribute
     allBlocks.forEach(block => {
         const colorLetter = block.getAttribute('data-color'); // Get the color letter from data attribute
-        console.log("Color", colorLetter) //TODO: Found the problem, there seems to be no dat attributes of data-color after a win.
         block.style.backgroundColor = colorMap[colorLetter] || 'transparent'; // Set color
     });
 }
@@ -381,10 +381,13 @@ function checkWin(faceBlocks) {
     for (let combination of winningCombinations) {
         const [a, b, c] = combination;
 
+        // Determine the text value of each block (handles both plain text and innerText)
+        const getText = (block) => typeof block === 'string' ? block : block.innerText;
+
         // Extract symbols without numbers
-        const symbolA = faceBlocks[a].innerText.replace(/\d+/g, "");
-        const symbolB = faceBlocks[b].innerText.replace(/\d+/g, "");
-        const symbolC = faceBlocks[c].innerText.replace(/\d+/g, "");
+        const symbolA = getText(faceBlocks[a]).replace(/\d+/g, "");
+        const symbolB = getText(faceBlocks[b]).replace(/\d+/g, "");
+        const symbolC = getText(faceBlocks[c]).replace(/\d+/g, "");
 
         // Check if all three blocks in the combination have the same non-empty symbol
         if (symbolA && symbolA === symbolB && symbolA === symbolC) {
@@ -995,20 +998,23 @@ function getRowOrColumn(blockId, direction, skipHistory = false) {
         default:
             console.log(`Unknown swipe direction: ${direction}`);
     }
-    currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-    currentPlayer = players[currentPlayerIndex];
-    console.log("Next turn: Player", currentPlayer);
+   
     
     updateScoreboard()
     if (versusMode === true) {
         checkRubixWin()
     }
     checkCubeWin();
-    if (aiMode === true) {
+    if (aiMode === true && currentPlayer === "X") {
         setTimeout(() => {
             aiMove();
         }, 50);
     }
+
+    currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+    currentPlayer = players[currentPlayerIndex];
+    updateScoreboard()
+    console.log("Next turn: Player", currentPlayer);
 }
 
 function undoLastMove() {
@@ -1170,7 +1176,7 @@ function handleBlockClick(event) {
                 player: currentPlayer,
             });
 
-            console.log(`Player ${currentPlayer} placed ${currentPlayer} on ${block.id}`);
+            console.log(`Player ${currentPlayer} placed ${currentPlayer} on ${block.id}`, block);
             
 
          
@@ -1308,6 +1314,7 @@ function handleBlockClick(event) {
     if (aiMode === true) {
         setTimeout(() => {
             aiMove();
+            
         }, 50);
     }
 }
@@ -1762,6 +1769,7 @@ function aiMove() {
                 // AI can win immediately
                 return { face, move: aiResult.pattern.find(index => board[index] === null) };
             }
+
             
             if (humanResult.turns === 1) {
                 // Block immediate winning move
@@ -1826,6 +1834,7 @@ function aiMove() {
     
             const filledTiles = board.filter(cell => cell !== null).length;
             const hasNoWins = !isWin(board, aiPlayer) && !isWin(board, humanPlayer);
+            changesForMajorityToWin(faceBlocks)
     
             if (filledTiles >= 8 && hasNoWins) {
                 console.log("DRAW DETECTED PUG", face)
@@ -2132,10 +2141,31 @@ function aiMove() {
 
     if (checkDrawState()) {
         noBreak = false;
-        console.log("DRAWOO");
+        console.log("DRAWOO", checkDrawState());
         // Handle the draw state if necessary
-        const faceBlocksMostRecentFace = Array.from(document.querySelectorAll(`.${mostRecentFace} .block`)); //TODO: I probably need to remove the dot, but that doesn't fix things fully.
+        const faceBlocksMostRecentFace = Array.from(document.querySelectorAll(`.${mostRecentFace} .block`)); 
         const mostRecentBoard = faceBlocksMostRecentFace.map(block => block.innerText || null);
+        if (rotationData.length == 1) {
+            if (document.querySelector(`div#${rotationData[0][0]}.block`).innerText == "O" ) {
+                console.log("HE did?")
+                // Extract the first entry from the array
+                const [id, faceRelation, skipHistory] = rotationData[0];
+
+                // Trigger the function with the extracted values
+                getRowOrColumn(id, faceRelation, skipHistory);
+
+                // Remove the first entry from the array after use
+                rotationData.shift();
+                currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+                currentPlayer = players[currentPlayerIndex];
+                updateScoreboard();
+                noBreak = false
+                return;
+            } else if (document.querySelector(`div#${rotationData[0][0]}.block`).innerText == "") {
+                console.log("Player has tried to swipe it away but this revealed an empty block.")
+                document.querySelector(`div#${rotationData[0][0]}.block`).innerText = "O"
+            }
+       } 
     
         if (priorityAi.length > 0) {
             console.log("Ai needs to make an immediate move to block dangerzone");
@@ -2148,12 +2178,12 @@ function aiMove() {
                 const faceBlocks = Array.from(document.querySelectorAll(`.${direction} .block`));
     
                 // Ensure that otherNumber is within the bounds of the faceBlocks array
-                if (otherNumber >= 0 && otherNumber < faceBlocks.length) {
+                if (otherNumber >= 0 && otherNumber <= 8) {
                     // Directly access the block and set its innerText to "O"
                     faceBlocks[otherNumber].innerText = "O";
                     console.log(`Placed "O" on the block with index ${otherNumber}`);
                 } else {
-                    console.log("Invalid otherNumber, it is out of bounds.", otherNumber);
+                    console.log("Invalid otherNumber, it is out of bounds.", otherNumber, faceBlocks.length, direction, Array.from(document.querySelectorAll(`.top .block`).length));
                 }
     
                 // After making the move, remove the item from the priorityAi array
@@ -2171,6 +2201,7 @@ function aiMove() {
             noBreak = true;
     
         } else {
+            
             console.log("Set up unblockable win");
     
             // Flag to stop after making one valid move
@@ -2180,9 +2211,15 @@ function aiMove() {
                 if (moveMade) return;  // If a move is already made, break out of the loop
                 
                 const { newFace, newNumber } = item;
+                let faceBlocks = Array.from(document.querySelectorAll(`.${newFace} .block`));
     
                 // Select all blocks on the specified face
-                const faceBlocks = Array.from(document.querySelectorAll(`.${newFace} .block`));
+                if (newFace == "up") {
+                    faceBlocks = Array.from(document.querySelectorAll(`.top .block`))
+                } else if (newFace == "down") {
+                    faceBlocks = Array.from(document.querySelectorAll(`.bottom .block`))
+                }
+              
                 const board = faceBlocks.map(block => block.innerText || null);
                 console.log(minTurnsToWin(board, humanPlayer).turns, "turns to win player");
     
@@ -2199,9 +2236,22 @@ function aiMove() {
                         }, 50);
                         
                         console.log("AI move II");
-                        console.log(`Set "O" on the block with index ${newNumber} on face ${newFace}`, getFaceRelation(newFace, mostRecentFace), targetBlock.id); //TODO: When played on the top it put's it in the correct space, just it doesn't rotate it right, it rotates it to the opposite direction/.
+                        console.log(`Set "O" on the block with index ${newNumber} on face ${newFace}`, getFaceRelation(newFace, mostRecentFace)); //TODO: When played on the top it put's it in the correct space, just it doesn't rotate it right, it rotates it to the opposite direction/.
                         setTimeout(() => {
-                            getRowOrColumn(targetBlock.id, getFaceRelation(newFace, mostRecentFace), skipHistory = false); //TODO: For some reason after rotating a row or layer with this the cube doesn't change color properly anymore.
+                            //getRowOrColumn(targetBlock.id, getFaceRelation(newFace, mostRecentFace), skipHistory = false); 
+                            // Initialize an empty array for rotation data
+                            
+
+                            // Dynamically add all elements as a single entry in the array
+                            rotationData.push([
+                                targetBlock.id,                              // targetBlock ID
+                                getFaceRelation(newFace, mostRecentFace),    // Face relation
+                                false                                        // skipHistory flag
+                            ]);
+                            console.log("Pugaroonieboonie", rotationData, rotationData.length, document.querySelector(`div#${rotationData[0][0]}.block`).innerText)
+                            
+                           
+
                         }, 50);
                         
     
@@ -2223,46 +2273,51 @@ function aiMove() {
             currentPlayer = players[currentPlayerIndex];
             return;
         }
+    } else {
+        console.log("NONO BREAk", noBreak, checkDrawState())
+        console.log("Drawooo" , checkDrawState())
+        noBreak = true
     }
     
     
       
+    if (noBreak == true) {
+        const priorityMove = evaluateFacePriority();
+        console.log(priorityMove, "priority")
 
-    const priorityMove = evaluateFacePriority();
-    console.log(priorityMove, "priority")
+        if (priorityMove) {
+            // Make the move based on priority evaluation
+            const faceBlocks = Array.from(document.querySelectorAll(`.${priorityMove.face} .block`));
+            faceBlocks[priorityMove.move].innerText = aiPlayer;
+            console.log("Ai move O")
+        } else {
+            console.log("No priority")
+            // No immediate priorities; fallback to Minimax
+            let bestScore = -Infinity;
 
-    if (priorityMove) {
-        // Make the move based on priority evaluation
-        const faceBlocks = Array.from(document.querySelectorAll(`.${priorityMove.face} .block`));
-        faceBlocks[priorityMove.move].innerText = aiPlayer;
-        console.log("Ai move O")
-    } else {
-        console.log("No priority")
-        // No immediate priorities; fallback to Minimax
-        let bestScore = -Infinity;
+            for (const face of faces) {
+                const faceBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
+                const board = faceBlocks.map(block => block.innerText || null);
+                const availableMoves = getAvailableMoves(board);
 
-        for (const face of faces) {
-            const faceBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
-            const board = faceBlocks.map(block => block.innerText || null);
-            const availableMoves = getAvailableMoves(board);
+                for (const move of availableMoves) {
+                    board[move] = aiPlayer; // Simulate AI move
+                    const score = minimax(board, 0, false); //TODO: Minimax function is lost, try to find it in an old version, because right now it's broken
+                    board[move] = null; // Undo move
 
-            for (const move of availableMoves) {
-                board[move] = aiPlayer; // Simulate AI move
-                const score = minimax(board, 0, false); //TODO: Minimax function is lost, try to find it in an old version, because right now it's broken
-                board[move] = null; // Undo move
-
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestFace = face;
-                    bestMove = move;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestFace = face;
+                        bestMove = move;
+                    }
                 }
             }
-        }
 
-        if (bestFace !== null && bestMove !== -1) {
-            const faceBlocks = Array.from(document.querySelectorAll(`.${bestFace} .block`));
-            faceBlocks[bestMove].innerText = aiPlayer;
-            console.log("Ai move II")
+            if (bestFace !== null && bestMove !== -1) {
+                const faceBlocks = Array.from(document.querySelectorAll(`.${bestFace} .block`));
+                faceBlocks[bestMove].innerText = aiPlayer;
+                console.log("Ai move II")
+            }
         }
     }
 
@@ -2308,6 +2363,11 @@ function getAdjacentFaceAndNumber(currentFace, direction, number) {
                 // cary over the same number
                 newNumber = number;
                 break;
+        case (["front", "down", ].includes(currentFace) &&
+        ["front", "down"].includes(newFace)):
+            // cary over the same number
+            newNumber = number;
+            break;
         case (["back", "up","down" ].includes(currentFace) &&
             ["back", "up", "down"].includes(newFace)):
             // cary over the same number
@@ -2422,6 +2482,7 @@ function checkDirectionResults(groupedResults, direction, blockNumber) {
   }
 
   function getFaceRelation(face1, face2) {
+    console.log(face1, face2)
     const cubeMap = {
         front: { up: "up", down: "down", left: "left", right: "right" },
         back: { up: "up", down: "down", left: "right", right: "left" }, 
@@ -2451,3 +2512,301 @@ function initializeLimitedSigns() {
 function initializeExponentOverwriteMode() {
     exponentOverwriteMode = true
 }
+
+function changesForMajorityToWin(board) {
+    const boardValues = board.map(cell => {
+        return typeof cell === 'string' ? cell : cell.innerText || '';
+    });
+    console.log("majority check ", boardValues)
+    const winPatterns = [
+        [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+        [0, 3, 6], [1, 4, 7], [2, 5, 8]  // Columns
+    ];
+
+    const changesForX = [];
+    const changesForO = [];
+    const parallelConflicts = [];
+    const nonConflictingChanges = { changesForX: [], changesForO: [] };
+
+    for (const pattern of winPatterns) {
+        const xCount = pattern.filter(index => boardValues[index] === 'X').length;
+        const oCount = pattern.filter(index => boardValues[index] === 'O').length;
+        const emptySpaces = pattern.filter(index => boardValues[index] === null);
+        const otherPlayerSpaces = pattern.filter(index => boardValues[index] === (xCount > oCount ? 'O' : 'X'));
+
+        // If there's a majority holder and one opposing player space
+        if (xCount > oCount && otherPlayerSpaces.length === 1) {
+            changesForX.push({
+                changeBlock: otherPlayerSpaces[0],
+                winningPattern: pattern
+            });
+        } else if (oCount > xCount && otherPlayerSpaces.length === 1) {
+            changesForO.push({
+                changeBlock: otherPlayerSpaces[0],
+                winningPattern: pattern
+            });
+        }
+    }
+
+    // Check for parallel conflicts: rows with changes in the same column or columns with changes in the same row
+    for (const changeX of changesForX) {
+        for (const changeO of changesForO) {
+            const xPatternType = changeX.winningPattern.every(index => Math.floor(index / 3) === Math.floor(changeX.winningPattern[0] / 3)) ? 'row' : 'column';
+            const oPatternType = changeO.winningPattern.every(index => Math.floor(index / 3) === Math.floor(changeO.winningPattern[0] / 3)) ? 'row' : 'column';
+
+            if (xPatternType === oPatternType) {
+                const isConflict = xPatternType === 'row'
+                    ? changeX.changeBlock % 3 === changeO.changeBlock % 3
+                    : Math.floor(changeX.changeBlock / 3) === Math.floor(changeO.changeBlock / 3);
+
+                if (isConflict) {
+                    parallelConflicts.push({
+                        changeForX: changeX,
+                        changeForO: changeO
+                    });
+                }
+            }
+        }
+    }
+
+    // Separate non-conflicting changes
+    for (const changeX of changesForX) {
+        const isConflicting = parallelConflicts.some(conflict => conflict.changeForX === changeX);
+        if (!isConflicting) {
+            nonConflictingChanges.changesForX.push(changeX);
+        }
+    }
+
+    for (const changeO of changesForO) {
+        const isConflicting = parallelConflicts.some(conflict => conflict.changeForO === changeO);
+        if (!isConflicting) {
+            nonConflictingChanges.changesForO.push(changeO);
+        }
+    }
+
+    // Logging function for cleaner output
+    function logResults() {
+        console.log("Parallel Conflicts:");
+        if (parallelConflicts.length > 0) {
+            parallelConflicts.forEach(({ changeForX, changeForO }, index) => {
+                console.log(`Conflict ${index + 1}:`);
+                
+                console.log(`  X needs to change block ${changeForX.changeBlock} in pattern ${changeForX.winningPattern}`);
+                console.log(`  O needs to change block ${changeForO.changeBlock} in pattern ${changeForO.winningPattern}`);
+                console.log(changeForX.changeBlock, changeForO.changeBlock)
+                const changeX = changeForX.changeBlock;
+                const changeO = changeForO.changeBlock;
+                const otherBlock = findOtherNumber(changeForX.changeBlock, changeForO.changeBlock)
+                
+                // Determine the bigger and smaller values
+                const biggest = Math.max(changeX, changeO);
+                const smallest = Math.min(changeX, changeO);
+                
+                // Calculate the difference
+                const difference = biggest - smallest;
+                const face = "front"
+                const sharedArray = []
+                
+                // Check conditions
+                
+
+                if (difference === 1 || difference === 2) {
+                    const directions = ["left", "right"];
+                    directions.forEach((direction) => {
+                        let XResult = getAdjacentFaceAndNumber(face, direction, changeX);
+                        let OResult = getAdjacentFaceAndNumber(face, direction, changeO);
+                
+                        const letter1 = document.querySelector(
+                            `div#${faceToLetter(XResult.newFace) + XResult.newNumber}.block`
+                        ).textContent;
+                        const letter2 = document.querySelector(
+                            `div#${faceToLetter(XResult.newFace) + OResult.newNumber}.block`
+                        ).textContent;
+                        const letter3 = document.querySelector(
+                            `div#${faceToLetter(
+                                XResult.newFace
+                            ) + findOtherNumber(XResult.newNumber, OResult.newNumber)}.block`
+                        ).textContent;
+                
+                        const numberMappings = [
+                            { number: changeX, value: letter1 },
+                            { number: changeO, value: letter2 },
+                            { number: otherBlock, value: letter3 },
+                        ];
+                
+                        const sortedMappings = numberMappings.sort((a, b) => a.number - b.number);
+                
+                        // Push the corresponding values into the shared array in the sorted order
+                        sortedMappings.forEach((mapping) => {
+                            sharedArray.push(mapping.value);
+                        });
+                
+                        console.log(sharedArray); // This should normally map them out correctly in the right order
+                
+                        const modifiedBoard = modifyRowOrColumn(boardValues, "row", determineRowOrColumn(changeX, changeO), sharedArray);
+                        sharedArray.length = 0;
+                        checkWin(modifiedBoard);
+                        console.log("Board with modified column:", modifiedBoard, modifiedBoard[0], checkWin(modifiedBoard));
+                    });
+                } else if (difference === 3 || difference === 6) {
+                    console.log("vertical alter:", difference);
+                }
+            });
+        } else {
+            console.log("  None");
+        }
+
+        console.log("\nNon-Conflicting Changes:");
+        console.log("  Changes for X:");
+        nonConflictingChanges.changesForX.forEach(({ changeBlock, winningPattern }, index) => {
+            console.log(`    ${index + 1}. Change block ${changeBlock} in pattern ${winningPattern}`);
+        });
+
+        console.log("  Changes for O:");
+        nonConflictingChanges.changesForO.forEach(({ changeBlock, winningPattern }, index) => {
+            console.log(`    ${index + 1}. Change block ${changeBlock} in pattern ${winningPattern}`);
+        });
+    }
+
+    logResults();
+
+    return {
+        parallelConflicts,
+        nonConflictingChanges
+    };
+}
+
+function modifyRowOrColumn(board, type, index, values) {
+    const size = 3; // Grid size (3x3)
+
+    if (type === "row") {
+        if (values.length !== size) {
+            throw new Error(`Row values must have exactly ${size} elements.`);
+        }
+        
+        // Calculate the insertion point
+        const startIndex = index * size;
+
+        // Modify the board row with the provided values
+        const updatedBoard = [...board];
+        for (let i = 0; i < size; i++) {
+            updatedBoard[startIndex + i] = values[i] || ""; // Use empty string if no value
+        }
+        console.log("Pugie", checkWin(updatedBoard))
+        return updatedBoard;
+    } else if (type === "column") {
+        if (values.length !== size) {
+            throw new Error(`Column values must have exactly ${size} elements.`);
+        }
+
+        // Modify the board column with the provided values
+        const updatedBoard = [...board];
+        for (let i = 0; i < size; i++) {
+            updatedBoard[i * size + index] = values[i] || ""; // Use empty string if no value
+        }
+        console.log("Pugie", checkWin(updatedBoard))
+        return updatedBoard;
+    } else {
+        throw new Error('Invalid type. Use "row" or "column".');
+    }
+    
+}
+
+
+
+
+
+
+// Test:
+const board = [
+    'X', 'O', 'O',
+    'X', 'X', 'O',
+    'O', 'X', 'X'
+];
+
+
+console.log(changesForMajorityToWin(board));
+
+function faceToLetter (direction) {
+    switch (direction) {
+        case "up":
+            return 'u';
+        case "left":
+            return 'l';
+           
+        case "right":
+            return 'r';
+           
+        case "down":
+            return 'd';
+        case "front":
+            return 'f';
+        case "back":
+            return'b';
+            
+        default:
+            return "Invalid input";
+    }
+    
+}
+
+function findOtherNumber(number1, number2) {
+    // Check if both numbers are in the same row
+    if (Math.floor(number1 / 3) === Math.floor(number2 / 3)) {
+        // Numbers are in the same row
+        const rowStart = Math.floor(number1 / 3) * 3; // Start of the row
+        const rowNumbers = [rowStart, rowStart + 1, rowStart + 2];
+
+        // Find the remaining number in the row
+        const otherNumber = rowNumbers.find(num => num !== number1 && num !== number2);
+        return otherNumber;
+    }
+
+    // Check if both numbers are in the same column
+    if (number1 % 3 === number2 % 3) {
+        // Numbers are in the same column
+        const colStart = number1 % 3; // Column index (0, 1, or 2)
+        const colNumbers = [colStart, colStart + 3, colStart + 6];
+
+        // Find the remaining number in the column
+        const otherNumber = colNumbers.find(num => num !== number1 && num !== number2);
+        return otherNumber;
+    }
+
+    // If the numbers are not in the same row or column
+    throw new Error("The given numbers are not in the same row or column.");
+}
+
+
+console.log(faceToLetter ("front"))
+console.log(findOtherNumber(0, 3))
+changesForMajorityToWin(board)
+function determineRowOrColumn(num1, num2) {
+    // Validate inputs
+    if (num1 < 0 || num1 > 8 || num2 < 0 || num2 > 8) {
+        throw new Error("Numbers must be between 0 and 8 inclusive.");
+    }
+
+    // Get rows and columns for each number
+    const row1 = Math.floor(num1 / 3);
+    const row2 = Math.floor(num2 / 3);
+
+    const col1 = num1 % 3;
+    const col2 = num2 % 3;
+    console.log(num1, "AAAAAA")
+
+    // Check if both numbers belong to the same row
+    if (row1 === row2) {
+        return { type: "row", index: row1 };
+    }
+
+    // Check if both numbers belong to the same column
+    if (col1 === col2) {
+        return { type: "column", index: col1 };
+    }
+
+    // If they don't belong to the same row or column
+    return null;
+}
+
+console.log(determineRowOrColumn(0, 3))
