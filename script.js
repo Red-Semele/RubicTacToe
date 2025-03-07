@@ -1134,9 +1134,10 @@ function handleBlockMouseDown(event) {
 }
 
 function handleBlockMouseUp(event) {
-    alert("scroll b")
+    
     const endBlock = event.target; // Get the block where mouseup occurred
     console.log("End: " + endBlock.id);
+    alert(JSON.stringify(endBlock.id))
 
     // If start and end block are the same, treat as a click
     if (startBlock === endBlock) {
