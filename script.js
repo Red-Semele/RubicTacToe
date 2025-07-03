@@ -12,6 +12,18 @@ let rubixCubeSolver = ""
 let xPositions = [];  // Track the positions of 'X' marks involved in the trap
 let dangerZones = [];
 let playerMiddle = false
+let playerMiddleArray = []
+let dangerZone = ""
+let dangerZoneCheck = ""
+let aiUnblockableMove = false
+let drawFace = ""
+let middleTactic = false
+let blockNumber
+let aiPlayer
+let humanPlayer
+let filteredHumanResults
+let filteredAiResults
+const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
 const faceColors = {
     front: 'red',
     back: 'blue',
@@ -20,6 +32,8 @@ const faceColors = {
     top: 'orange',
     bottom: 'purple'
 };
+let aiDefense = false
+let aiAttack = false
 let groupedUpResults;
 let groupedDownResults;
 let groupedLeftResults;
@@ -92,7 +106,6 @@ function rotateColumn(colIndex) {
 }
 
 function toggleDebug(isDebug) {
-    const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
     
     faces.forEach(faceName => {
         const faceBlocks = document.querySelectorAll(`.${faceName} .block`);
@@ -338,7 +351,7 @@ function rotateLayers(layers, type, columnIndex = null, isSuperTicTacToeMode = f
             rotateFace('left', 'clockwise');
         }
     }
-
+    console.log("columnIndex", columnIndex)
     // Update the colors of the blocks after rotation
     updateBlockColors(); // Call this function to apply the background colors
 }
@@ -382,7 +395,11 @@ function checkWin(faceBlocks) {
         const [a, b, c] = combination;
 
         // Determine the text value of each block (handles both plain text and innerText)
-        const getText = (block) => typeof block === 'string' ? block : block.innerText;
+        const getText = (block) => {
+            if (block === null) return ''; // Return an empty string or some fallback value
+            return typeof block === 'string' ? block : block.innerText;
+        };
+          
 
         // Extract symbols without numbers
         const symbolA = getText(faceBlocks[a]).replace(/\d+/g, "");
@@ -458,7 +475,7 @@ function updateScoreboard() {
 // Function to check if a player has won on a cube face
 function checkCubeWin() {
     console.log("Winner", currentPlayer)
-    const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+
     const overallWinners = new Map();
     const faceWinners = {}; // Track winners per face
 
@@ -503,7 +520,7 @@ function checkCubeWin() {
         let showWin = false
         if (delayedWin) {
             if (leadingPlayer == currentPlayer) {
-                console.log("SHOW WINS", leadingPlayer, currentPlayer)
+                console.log("SHOW WINS", leadingPlayer, currentPlayer) //Todo, there is a weird interaction with how the ai mode works and the deleyaed win mode, thus making the delayed win mode essentially not delayed if you play it against the ai, try to fix that.
                 showWin = true
             } else {
                 return
@@ -546,7 +563,7 @@ function checkCubeWin() {
 }
 
 function checkRubixWin() {
-    const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+  
     let allFacesSingleColor = true; // Track if all faces are solid in color
 
     for (const face of faces) {
@@ -747,6 +764,33 @@ function rotateSColumn(columnIndex) {
 function rotateFace(face, direction) {
     // Get the blocks of the specified face
     const blocks = Array.from(document.querySelectorAll(`.${face} .block`));
+    console.log("Face rotate test", rotationData[0])
+    if (rotationData[0]) {
+        if (rotationData[0][0].includes(faceToLetter(face))) {
+            //TODO: above line throws error
+            console.log(rotationData[0][1], "rotate test", rotationData[0])
+            rotationData[0][1] = nextDirection(rotationData[0][1], direction) //Translate the way the ai should move a certain row or column to win when the player has rotated something parts of the blocks it needs.
+            console.log("Face rotate test", rotationData[0][1])
+            const numberMapping = {
+                counterclockwise: { 0: 6, 1: 3, 2: 0, 3: 7, 4: 4, 5: 1, 6: 8, 7: 5, 8: 2 },
+                clockwise: { 0: 2, 1: 5, 2: 8, 3: 1, 4: 4, 5: 7, 6: 0, 7: 3, 8: 6 }
+            };
+        
+            let original = rotationData[0][0]; // Example: "f0"
+            console.log("original", original)
+            let letter = original[0]; // Extract the letter (e.g., "f")
+            let number = parseInt(original[1], 10); // Extract the number (e.g., 0)
+        
+            if (isNaN(number) || !(number in numberMapping[direction])) return null; // Handle invalid input
+        
+            let newNumber = numberMapping[direction][number]; // Get new number
+        
+            rotationData[0][0] = letter + newNumber; // Update rotationData
+            console.log("Face rotate test", rotationData[0][0], original, number, newNumber, direction, face)
+        }
+    }
+    
+
     
     // Ensure we have exactly 9 blocks
     if (blocks.length !== 9) {
@@ -819,7 +863,7 @@ const moveHistory = [];
 
 function getRowOrColumn(blockId, direction, skipHistory = false) {
     const face = blockId[0];                  // Get the face letter from the first character of the ID
-    const blockNumber = parseInt(blockId[1]); // Get the block number from the second character of the ID
+    blockNumber = parseInt(blockId[1]); // Get the block number from the second character of the ID
     const row = Math.floor(blockNumber / 3);  // Calculate row (0, 1, 2)
     const col = blockNumber % 3;              // Calculate column (0, 1, 2)
     let angle = "";
@@ -1005,16 +1049,41 @@ function getRowOrColumn(blockId, direction, skipHistory = false) {
         checkRubixWin()
     }
     checkCubeWin();
-    if (aiMode === true && currentPlayer === "X") {
-        setTimeout(() => {
-            aiMove();
-        }, 50);
-    }
+    
 
     currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
     currentPlayer = players[currentPlayerIndex];
     updateScoreboard()
     console.log("Next turn: Player", currentPlayer);
+    
+    if (aiMode === true && currentPlayer === "O") {
+       
+        setTimeout(() => {
+            const content = document.querySelector(
+                `div#${rotationData[0][0]}.block`
+            )
+            console.log(evaluateFacePriority(), "Bobby yoyo", rotationData[0], content.textContent, "Test", getAdjacentFaceAndNumber(currentFace, rotationData[0][1], rotationData[0][[0]])) //Make the last part of this work properly, so out of 0,0, just get the number.
+          
+            const priorityMove = evaluateFacePriority();
+            console.log(priorityMove, "priority", filteredAiResults[0].turns, JSON.stringify(filteredAiResults))
+
+            if (priorityMove && (faceToLetter(priorityMove.face) + priorityMove.move) !== rotationData[0][0] || content.textContent !== "O") {
+                //The above if case makes it so that if the AI can win with an unblockable move it will perform that, otherwise it will not.
+                // Make the move based on priority evaluation TODO: Right now this is redundant code, make a function for this code so that I can use ot twice with not double the amount of code.
+                const faceBlocks = Array.from(document.querySelectorAll(`.${priorityMove.face} .block`));
+                faceBlocks[priorityMove.move].innerText = aiPlayer;
+                console.log("Ai move O Oh no", priorityMove.face, priorityMove.move, filteredAiResults[0])
+                if (priorityMove.move === 4 && middleTactic === false) {
+                    console.log("An attempt to activate the middle tactic")
+                    middleTactic = true
+                }
+            } else {
+                aiMove();
+            }
+                checkCubeWin()
+            }, 300);
+            
+        }
 }
 
 function undoLastMove() {
@@ -1224,7 +1293,7 @@ function handleBlockClick(event) {
         if (!blockContent || (exponentOverwriteMode && blockSign !== currentPlayer && chosenExponent > blockExponent)) {
             // Limited Signs Mode: Remove the oldest sign if max signs are exceeded
             if (limitedSignsMode) {
-                if (playerMoves[currentPlayerIndex].length >= 5) {
+                if (playerMoves[currentPlayerIndex].length >= 4) {
                     const oldestMove = playerMoves[currentPlayerIndex].shift(); // Remove the oldest move
                     const oldestBlock = document.getElementById(oldestMove.blockId);
                     oldestBlock.innerText = ''; // Clear the block
@@ -1259,10 +1328,8 @@ function handleBlockClick(event) {
     }
 
     let direction = block.id.charAt(0); // The letter (e.g., 'f', 'u')
-    let blockNumber = parseInt(block.id.substring(1), 10); // The number (e.g., '3', '1')
-    if (blockNumber === 4) {
-        playerMiddle = true;
-    }
+    blockNumber = parseInt(block.id.substring(1), 10); // The number (e.g., '3', '1')
+    
 
     switch (direction) {
         case 'u':
@@ -1287,8 +1354,13 @@ function handleBlockClick(event) {
             direction = "Invalid input";
     }
 
+    if (blockNumber === 4) {
+        playerMiddle = true;
+        playerMiddleArray.push(direction);
+    }
+
     console.log(direction, "Direction", groupedLeftResults);
-    console.log("Checking Left Results:");
+    console.log("Checking Left Results:", checkDirectionResults(groupedLeftResults, direction, blockNumber), direction, blockNumber, groupedLeftResults);
     checkDirectionResults(groupedLeftResults, direction, blockNumber);
 
     console.log("Checking Right Results:");
@@ -1308,6 +1380,7 @@ function handleBlockClick(event) {
     currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
     currentPlayer = players[currentPlayerIndex];
     console.log("Next turn: Player", currentPlayer);
+    console.log("rotation data", JSON.stringify(rotationData))
 
     checkCubeWin();
     updateScoreboard();
@@ -1418,7 +1491,6 @@ function scrambleCube() {
 
     // Helper function to calculate total entropy for all faces
     function calculateTotalEntropy() {
-        const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
         return faces.reduce((totalEntropy, face) => totalEntropy + calculateFaceEntropy(face), 0);
     }
 
@@ -1633,12 +1705,16 @@ function enableAiMode() {
 
 
 function aiMove() {
-    const faces = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+    let moveMade = false;
+    console.log("initiate ai move")
+    
     let bestFace = null;
     let bestMove = -1;
 
-    const aiPlayer = 'O';
-    const humanPlayer = 'X';
+    aiPlayer = 'O';
+    humanPlayer = 'X';
+    console.log("rotate Ai, checkdrawstate")
+
 
     function isWin(board, player) {
         const winPatterns = [
@@ -1688,140 +1764,9 @@ function aiMove() {
         return board.every(cell => cell !== null);
     }
 
-    function minTurnsToWin(board, player) {
-        const winPatterns = [
-            [0, 1, 2], [3, 4, 5], [6, 7, 8],
-            [0, 3, 6], [1, 4, 7], [2, 5, 8],
-            [0, 4, 8], [2, 4, 6]
-        ];
+    
 
-        let minTurns = Infinity;
-        let winningPattern = [];
-
-        for (const pattern of winPatterns) {
-            const playerMoves = pattern.filter(index => board[index] === player).length;
-            const emptySpaces = pattern.filter(index => board[index] === null).length;
-
-            if (playerMoves + emptySpaces === 3) {
-                if (emptySpaces < minTurns) {
-                    minTurns = emptySpaces;
-                    winningPattern = pattern;
-                }
-            }
-        }
-
-        return minTurns === Infinity ? { turns: -1, pattern: [] } : { turns: minTurns, pattern: winningPattern };
-    }
-
-    function evaluateFacePriority() {
-        let priorityList = [];
-        const middleIndex = Math.floor(faces[0].length / 2); // Assuming all faces have the same board size
-        const middleSquare = faces[0][middleIndex];
-        const aiFirstMove = faces.every(face => 
-            Array.from(document.querySelectorAll(`.${face} .block`)).every(block => !block.innerText)
-        );
     
-        // If it's the AI's first move, play in the middle if it's free
-        if (aiFirstMove && middleSquare === null) {
-            return { face: faces[0], move: middleIndex }; 
-        }
-    
-        for (const face of faces) {
-            const faceBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
-            const board = faceBlocks.map(block => block.innerText || null);
-    
-            const aiResult = minTurnsToWin(board, aiPlayer);
-            const humanResult = minTurnsToWin(board, humanPlayer);
-    
-            const middleIndex = Math.floor(board.length / 2); // Assuming the board has a single middle square
-            const cornerIndices = [0, board.length - 1, Math.sqrt(board.length) - 1, board.length - Math.sqrt(board.length)];
-    
-            // Check if the player played in a corner and the middle is empty
-            if (cornerIndices.some(index => board[index] === humanPlayer) && board[middleIndex] === null) {
-                // Prioritize the middle if it's empty
-                console.log("Special")
-                return { face, move: middleIndex };
-            }
-    
-            if (playerMiddle === true) {
-                // Check if the player can win in one move
-                if (humanResult.turns === 1) {
-                    // Block the player's winning move
-                    playerMiddle = false; // Reset the flag
-                    console.log("Special")
-                    return { face, move: humanResult.pattern.find(index => board[index] === null) };
-                }
-    
-                // Otherwise, check for corners
-                playerMiddle = false; // Reset the flag
-                for (const cornerIndex of cornerIndices) {
-                    if (board[cornerIndex] === null) {
-                        console.log("Special")
-                        return { face, move: cornerIndex }; // Pick the first available corner
-                    }
-                }
-            }
-    
-            // Check for future winning moves (both 1-turn and 2-turn)
-            let blockingMove = null;
-
-            if (aiResult.turns === 1) {
-                // AI can win immediately
-                return { face, move: aiResult.pattern.find(index => board[index] === null) };
-            }
-
-            
-            if (humanResult.turns === 1) {
-                // Block immediate winning move
-                console.log("Special")
-                blockingMove = humanResult.pattern.find(index => board[index] === null);
-            } else if (humanResult.turns === 2) {
-                // Check for future winning move (2 turns)
-                console.log("Special")
-                blockingMove = humanResult.pattern.find(index => board[index] === null);
-            }
-    
-            // If we find a blocking move (either 1-turn or 2-turn threat), block it
-            if (blockingMove !== null) {
-                console.log("Special")
-                return { face, move: blockingMove };
-            }
-    
-            // Check if the AI can win in the next move
-           
-    
-            if (humanResult.turns === 1) {
-                // Human can win in one move, block it
-                return { face, move: humanResult.pattern.find(index => board[index] === null) };
-            }
-    
-            // If the human has a 2-turn winning opportunity, prioritize blocking that
-            if (humanResult.turns === 2) {
-                // Human can win in two moves, consider blocking
-                priorityList.push({
-                    face,
-                    move: humanResult.pattern.find(index => board[index] === null),
-                    priority: 2
-                });
-            }
-    
-            // If the AI has a 2-turn winning opportunity, prioritize setting up that win
-            if (aiResult.turns === 2) {
-                // AI can win in two moves, consider setting up
-                priorityList.push({
-                    face,
-                    move: aiResult.pattern.find(index => board[index] === null),
-                    priority: 3
-                });
-            }
-        }
-    
-        // Sort by priority (higher priority first)
-        priorityList.sort((a, b) => b.priority - a.priority);
-    
-        // Return the highest priority move
-        return priorityList.length > 0 ? priorityList[0] : null;
-    }
     
     
     
@@ -1837,16 +1782,18 @@ function aiMove() {
             changesForMajorityToWin(faceBlocks)
     
             if (filledTiles >= 8 && hasNoWins) {
-                console.log("DRAW DETECTED PUG", face)
+                console.log("DRAW DETECTED PUG", face, faceBlocks)
+                drawFace =  face
                 // Check for valid square patterns first
                 const validSquares = checkSquarePattern(board);
+                console.log(validSquares, "valid Squares")
                 if (validSquares.length > 0) {
                     validSquares.forEach(pattern => {
-                        console.log(`Square pattern with two X's and two O's detected on face: ${face} | Pattern: ${pattern.join(', ')} | ${dangerZone}`);
+                        console.log(`Square pattern with two X's and two O's detected on face: ${face} | Pattern: ${pattern.join(', ')} | ${dangerZones}`);
                     });
                 }
                 dangerZones.forEach((zone) => {
-                    const dangerZone = zone.dangerZone;
+                    dangerZone = zone.dangerZone;
                     const minIndex = Math.min(...dangerZone); // Find the smallest number
                     const maxIndex = Math.max(...dangerZone); // Find the biggest number
                     const difference = maxIndex - minIndex;
@@ -1873,6 +1820,7 @@ function aiMove() {
                                 });
                             }
                             leftResultsGrouped.get(leftKey).numbers.push(number);
+                           
                 
                             // Group right results by regularFace and newFace
                             const rightKey = `${face}_${rightResult.newFace}`;
@@ -1886,7 +1834,7 @@ function aiMove() {
                             rightResultsGrouped.get(rightKey).numbers.push(number);
                 
                             console.log(leftResult, `Processed number ${number} to the left`);
-                            console.log(rightResult, `Processed number ${number} to the right`);
+                            console.log(rightResult, `Processed number ${number} to the right`, rightResultsGrouped.values());
                         });
                 
                         groupedLeftResults = Array.from(leftResultsGrouped.values());
@@ -1998,7 +1946,7 @@ function aiMove() {
             }
         }
     
-        console.log("No valid diagonal with 2 O's found."); //If none are found then just play in the dangerzone instead, if there is one (there kind of has to be atleast one, right?)
+        console.log("No valid diagonal with 2 O's found.", board); //If none are found then just play in the dangerzone instead, if there is one (there kind of has to be atleast one, right?)
         return null; // No valid diagonal found
     }
     
@@ -2027,13 +1975,13 @@ function aiMove() {
                 const [a, b, c, d] = pattern;
     
                 const validOAdjacency = (
-                    // Horizontal adjacency (0, 1 or 2, 3)
-                    (values[0] === 'O' && values[1] === 'O') ||
-                    (values[1] === 'O' && values[2] === 'O') ||
-                    (values[2] === 'O' && values[3] === 'O') ||
-                    // Vertical adjacency (0, 3 or 1, 4)
-                    (values[0] === 'O' && values[2] === 'O') ||
-                    (values[1] === 'O' && values[3] === 'O')
+                    
+                    (values[0] === 'O' && values[1] === 'O') || // O's are adjacent horizontally (top row)
+                    (values[2] === 'O' && values[3] === 'O') || // O's are adjacent horizontally (bottom row)
+                    (values[0] === 'O' && values[2] === 'O') || // O's are adjacent vertically (left column)
+                    (values[1] === 'O' && values[3] === 'O')    // O's are adjacent vertically (right column)
+                    
+                    
                 );
     
                 if (validOAdjacency) {
@@ -2041,29 +1989,45 @@ function aiMove() {
     
                     // Determine if O's are horizontally or vertically adjacent
                     if (values[0] === 'O' && values[1] === 'O') {
+                        console.log("Dangerzoned out 0 out")
                         // O's are horizontally aligned (0, 1), danger zone will be vertical
-                        const dangerZone = calculateDangerZone(pattern, 'horizontal');
+                        dangerZone = calculateDangerZone(pattern, 'horizontal');
                         dangerZones.push({ square: pattern, dangerZone });
                     } else if (values[1] === 'O' && values[2] === 'O') {
+                        console.log("Dangerzoned out 1")
                         // O's are horizontally aligned (1, 2), danger zone will be vertical
-                        const dangerZone = calculateDangerZone(pattern, 'horizontal');
+                        dangerZone = calculateDangerZone(pattern, 'horizontal');
                         dangerZones.push({ square: pattern, dangerZone });
                     } else if (values[0] === 'O' && values[2] === 'O') {
+                        console.log("Dangerzoned out 2")
                         // O's are vertically aligned (0, 3), danger zone will be horizontal
                         const dangerZone = calculateDangerZone(pattern, 'vertical');
                         dangerZones.push({ square: pattern, dangerZone });
                     } else if (values[1] === 'O' && values[3] === 'O') {
+                        console.log("Dangerzoned out 3")
                         // O's are vertically aligned (1, 4), danger zone will be horizontal
-                        const dangerZone = calculateDangerZone(pattern, 'vertical');
+                        dangerZone = calculateDangerZone(pattern, 'vertical'); //TODO: I think I see the problem, this can either be horizontal or vetical, but it's just usually the lower square, either the left or right one.
                         dangerZones.push({ square: pattern, dangerZone });
+                    }  else if (values[2] === 'O' && values[3] === 'O') {
+                        console.log("Dangerzoned out 4")
+                        // O's are vertically aligned (1, 4), danger zone will be horizontal
+                        dangerZone = calculateDangerZone(pattern, 'horizontal');
+                        console.log("Fix test", dangerZone)
+                        dangerZones.push({ square: pattern, dangerZone });
+
+                    }   else {
+                        console.log("Found the problem!", values[0], values [1], values[2], values [3]) //TODO: values [2] and values [3] are  both O, and because of ho this is made it doesn't take that one into acount
                     }
+                    
+                    dangerZoneCheck = dangerZone
+                    console.log("Dangerzoned out", dangerZoneCheck, dangerZone, "valid squares", validSquares, values[0], values [1], values[2], values[3]) //TODO: I think I see the problem? in all essence it's that the valids quares get seen, but they for some reason don't get a dangerzone assigned to them if they are in the lower half?
                 }
             }
         }
     
         if (validSquares.length > 0) {
-            console.log(`Valid square patterns detected: ${validSquares.map(square => square.join(', ')).join(' | ')}`);
-            console.log(`Danger zones detected: ${dangerZones.map(zone => `Square: [${zone.square.join(', ')}], Danger zone: [${zone.dangerZone.join(', ')}]`).join(' | ')}`);
+            console.log(`Valid square patterns detected: ${validSquares.map(square => square.join(', ')).join(' | ')}`, dangerZone);
+            console.log(dangerZones, `Danger zones detected: ${dangerZones.map(zone => `Square: [${zone.square.join(', ')}], Danger zone: [${zone.dangerZone.join(', ')}]`).join(' | ')}`); //TODO: This does not alway result in dangerzones, research why.
             return { validSquares, dangerZones };
         }
     
@@ -2141,34 +2105,22 @@ function aiMove() {
 
     if (checkDrawState()) {
         noBreak = false;
-        console.log("DRAWOO", checkDrawState());
+        console.log("DRAWOO", checkDrawState(), currentPlayer);
         // Handle the draw state if necessary
+        if (mostRecentFace == "up") {
+            mostRecentFace = "top"
+        } else if (mostRecentFace == "down") {
+            mostRecentFace = "bottom"
+        }
         const faceBlocksMostRecentFace = Array.from(document.querySelectorAll(`.${mostRecentFace} .block`)); 
+        console.log("Puglin ", faceBlocksMostRecentFace)
         const mostRecentBoard = faceBlocksMostRecentFace.map(block => block.innerText || null);
-        if (rotationData.length == 1) {
-            if (document.querySelector(`div#${rotationData[0][0]}.block`).innerText == "O" ) {
-                console.log("HE did?")
-                // Extract the first entry from the array
-                const [id, faceRelation, skipHistory] = rotationData[0];
-
-                // Trigger the function with the extracted values
-                getRowOrColumn(id, faceRelation, skipHistory);
-
-                // Remove the first entry from the array after use
-                rotationData.shift();
-                currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-                currentPlayer = players[currentPlayerIndex];
-                updateScoreboard();
-                noBreak = false
-                return;
-            } else if (document.querySelector(`div#${rotationData[0][0]}.block`).innerText == "") {
-                console.log("Player has tried to swipe it away but this revealed an empty block.")
-                document.querySelector(`div#${rotationData[0][0]}.block`).innerText = "O"
-            }
-       } 
+        console.log("rotate Ai, checkdrawstate")
+        rotateAi()
+        
     
         if (priorityAi.length > 0) {
-            console.log("Ai needs to make an immediate move to block dangerzone");
+            console.log("Ai needs to make an immediate move to block dangerzone", priorityAi);
     
             // For each matched result, use the otherNumber and direction to update the move
             priorityAi.forEach((item, index) => {
@@ -2180,8 +2132,9 @@ function aiMove() {
                 // Ensure that otherNumber is within the bounds of the faceBlocks array
                 if (otherNumber >= 0 && otherNumber <= 8) {
                     // Directly access the block and set its innerText to "O"
-                    faceBlocks[otherNumber].innerText = "O";
-                    console.log(`Placed "O" on the block with index ${otherNumber}`);
+                    console.log(faceBlocks[otherNumber], faceBlocks, otherNumber, "Test five")
+                    faceBlocks[otherNumber].innerText = "O"; 
+                    console.log(`Placed "O" on the block with index ${otherNumber} ${direction}`);
                 } else {
                     console.log("Invalid otherNumber, it is out of bounds.", otherNumber, faceBlocks.length, direction, Array.from(document.querySelectorAll(`.top .block`).length));
                 }
@@ -2200,14 +2153,20 @@ function aiMove() {
             console.log("TESt, should block player.");
             noBreak = true;
     
-        } else {
+        } else if (adjacentData.length > 0 && aiAttack === false){
+            aiAttack = true
+           
+            console.log("Set up unblockable win", rotationData[0]);
+            console.log("No defend from unblockable win", faceBlocksMostRecentFace);
             
-            console.log("Set up unblockable win");
+            
+            // TODO: This can wrongly read an unblockable win, probably beceause it's an else statement, I need to define it more. Sometimes this also doesn't work.
     
             // Flag to stop after making one valid move
-            let moveMade = false;
+            
     
             adjacentData.forEach(item => {
+                console.log("Binos Mime", moveMade)
                 if (moveMade) return;  // If a move is already made, break out of the loop
                 
                 const { newFace, newNumber } = item;
@@ -2225,30 +2184,35 @@ function aiMove() {
     
                 // Ensure newNumber is within the valid range for the face (0 to 8)
                 if (newNumber >= 0 && newNumber < faceBlocks.length) {
+                    console.log("Binos Mime")
                     // Get the block at the newNumber index
                     const targetBlock = faceBlocks[newNumber];
     
                     // Check if the block is empty (i.e., has no inner text)
                     if (!targetBlock.innerText.trim()) {
+                        console.log("Binos Mime", faceBlocks, targetBlock)
                         // If the block is empty, set its inner text to "O"
                         setTimeout(() => {
+                            console.log("Block set by AI", targetBlock.id)
                             targetBlock.innerText = "O";
                         }, 50);
                         
                         console.log("AI move II");
-                        console.log(`Set "O" on the block with index ${newNumber} on face ${newFace}`, getFaceRelation(newFace, mostRecentFace)); //TODO: When played on the top it put's it in the correct space, just it doesn't rotate it right, it rotates it to the opposite direction/.
+                        console.log(`Set "O" on the block with index ${newNumber} on face ${newFace}`, getFaceRelation(newFace, mostRecentFace), newFace, mostRecentFace, adjacentData[0]); //TODO: When played on the top it put's it in the correct space, just it doesn't rotate it right, it rotates it to the opposite direction/.
                         setTimeout(() => {
                             //getRowOrColumn(targetBlock.id, getFaceRelation(newFace, mostRecentFace), skipHistory = false); 
                             // Initialize an empty array for rotation data
                             
 
                             // Dynamically add all elements as a single entry in the array
+                            aiUnblockableMove = true
                             rotationData.push([
                                 targetBlock.id,                              // targetBlock ID
                                 getFaceRelation(newFace, mostRecentFace),    // Face relation
                                 false                                        // skipHistory flag
                             ]);
-                            console.log("Pugaroonieboonie", rotationData, rotationData.length, document.querySelector(`div#${rotationData[0][0]}.block`).innerText)
+                            console.log("rotation pushed!", rotationData)
+                            console.log("Pugaroonieboonie", rotationData[0], rotationData.length, document.querySelector(`div#${rotationData[0][0]}.block`).innerText)
                             
                            
 
@@ -2257,6 +2221,10 @@ function aiMove() {
     
                         // After making the move, stop further checks
                         moveMade = true;  // Mark that a move has been made
+                        currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+                        currentPlayer = players[currentPlayerIndex];
+                        updateScoreboard()
+
                     } else {
                         console.log(`Block with index ${newNumber} on face ${newFace} is already occupied.`);
                     }
@@ -2264,13 +2232,51 @@ function aiMove() {
                     console.log(`Invalid block index ${newNumber} for face ${newFace}.`);
                 }
             });
+        } else if (adjacentData.length === 0) {
+           
+            console.log("Defend from unblockable win", faceBlocksMostRecentFace);
+            if (moveMade === true) {
+                moveMade = false
+                console.log("defend 1")
+            } else {
+                const block = faceBlocksMostRecentFace.find(el => el.id.includes("4"));
+                console.log(block?.textContent ,"content found" , cube || "No content found", faceToLetter(mostRecentFace) + 0, block, faceBlocksMostRecentFace, mostRecentFace);
+                
+                
+                if (block.textContent === "") {
+                    block.innerText = "O"
+                    let board = faceBlocksMostRecentFace.map(block => block.innerText || null);
+                    
+                    let toChangeNumber = checkDiagonalForTwoOs(board)
+                    toChangeNumber = getAdjacentFaceAndNumber(mostRecentFace, getFaceRelation(mostRecentFace, drawFace), toChangeNumber).newNumber
+                    console.log("AI move VI", toChangeNumber, checkDiagonalForTwoOs(board), getFaceRelation(mostRecentFace, drawFace), mostRecentFace, drawFace)
+                    currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+                    currentPlayer = players[currentPlayerIndex];
+                    console.log("Next turn: Player 55", currentPlayer, block, getFaceRelation(drawFace, mostRecentFace), drawFace, mostRecentFace); //TODO: use something like , result.currentFace, result.newFace) but of which I can access in here.
+                    
+                    updateScoreboard()
+                    aiUnblockableMove = true
+                    rotationData.push([
+                        faceToLetter(drawFace) + toChangeNumber,                    // TODO: This is better now, but still not perfect, right to top acts weird.
+                        getFaceRelation(drawFace, mostRecentFace),    // Face relation TODO: Find a way to make this dynamic, store the other face
+                        false                                        // skipHistory flag
+                    ]);
+                    console.log("defend 2", rotationData[0], mostRecentFace, drawFace)
+                } else {
+                    console.log("Move on")
+                    noBreak = true
+                    console.log("defend 3", block)
+                }
+            }
+            
+             
+        } else {
+            console.log("No triggers", adjacentData, adjacentData[0], aiAttack, middleTactic)
         }
     
         if (noBreak === false) {
             // Update the current player and handle the next player's turn
             console.log("No break");
-            currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-            currentPlayer = players[currentPlayerIndex];
             return;
         }
     } else {
@@ -2280,8 +2286,8 @@ function aiMove() {
     }
     
     
-      
-    if (noBreak == true) {
+    console.log("Made", moveMade) 
+    if (noBreak == true && aiDefense == false) {
         const priorityMove = evaluateFacePriority();
         console.log(priorityMove, "priority")
 
@@ -2289,9 +2295,13 @@ function aiMove() {
             // Make the move based on priority evaluation
             const faceBlocks = Array.from(document.querySelectorAll(`.${priorityMove.face} .block`));
             faceBlocks[priorityMove.move].innerText = aiPlayer;
-            console.log("Ai move O")
+            console.log("Ai move O", priorityMove.face, priorityMove.move)
+            if (priorityMove.move === 4 && middleTactic === false) {
+                console.log("An attempt to activate the middle tactic")
+                middleTactic = true
+            }
         } else {
-            console.log("No priority")
+            console.log("No priority test")  //TODO: For some reason this seems to trigger too soon, even when there should be priority set but isn't.
             // No immediate priorities; fallback to Minimax
             let bestScore = -Infinity;
 
@@ -2316,7 +2326,7 @@ function aiMove() {
             if (bestFace !== null && bestMove !== -1) {
                 const faceBlocks = Array.from(document.querySelectorAll(`.${bestFace} .block`));
                 faceBlocks[bestMove].innerText = aiPlayer;
-                console.log("Ai move II")
+                console.log("Ai move II", bestFace, bestMove)
             }
         }
     }
@@ -2325,9 +2335,13 @@ function aiMove() {
     checkDrawState()
     currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
     currentPlayer = players[currentPlayerIndex];
+    console.log("Next turn: Player", currentPlayer);
+    console.log("score update")
+    updateScoreboard()
 }
 
 function getAdjacentFaceAndNumber(currentFace, direction, number) {
+    //TODO: Check out all the faces with all their rotations? Sometimes they are not fully right yet.
     if (currentFace === "bottom") {
         currentFace = "down"
     } else if (currentFace === "top") {
@@ -2345,9 +2359,10 @@ function getAdjacentFaceAndNumber(currentFace, direction, number) {
 
     // Get the new face
     const newFace = cubeMap[currentFace]?.[direction];
+    console.log("Current face", currentFace, direction, newFace, mostRecentFace) //TODO: Very very rarely the direction seems to be undefined, leading to more problems right now, currentface front, direction undefined again, leading to mostrecentface also being undefined
 
     if (!newFace) {
-        throw new Error("Invalid face or direction");
+        throw new Error("Invalid face or direction", currentFace, direction); //TODO: For some weird reason, while playing on the bottom and getting a draw, it thinks that "front" is a direction? 
     }
 
     // Define the transformation logic for the number
@@ -2360,7 +2375,7 @@ function getAdjacentFaceAndNumber(currentFace, direction, number) {
                 break;
         case (["front", "up", ].includes(currentFace) &&
               ["front", "up"].includes(newFace)):
-                // cary over the same number
+                // cary over the same number THis one works for frpnt -> up and backwards
                 newNumber = number;
                 break;
         case (["front", "down", ].includes(currentFace) &&
@@ -2376,29 +2391,45 @@ function getAdjacentFaceAndNumber(currentFace, direction, number) {
 
         case (["left", "right", "down", "up"].includes(currentFace) &&
         ["left", "right", "down", "up"].includes(newFace)):
-            if (direction === "up" || direction == "left") {
-                // Handle the "up" direction
-                newNumber = transformNumber(number, "row", "col", false);
-                console.log("TEST", newNumber)
-                break;
-            } else if (direction === "down" || direction == "right") {
-                // Handle the "down" direction
+            if (currentFace === "down" && newFace === "left") {
+                newNumber = transformNumber(number, "col", "row", false)
+                console.log("Pug82", currentFace, newFace, direction, number, newNumber) //This one seems to work for right -> bottom, but also for bottom -> left
+            } else if (newFace === "up" && currentFace === "left" || newFace === "right" && currentFace === "up" || newFace === "right" && currentFace === "down")  {
+                    newNumber = transformNumber(number, "col", "row", false) //THis one works for left -> top normally
+                    console.log("NewNumberNan", number, newNumber, currentFace, newFace)
+            } else if (newFace === "left" && currentFace === "up" || newFace === "up" && currentFace === "right") {
+                newNumber = transformNumber(number, "row", "col", false); 
+                console.log("NewNumberNan", number, newNumber, currentFace, newFace)
+            
+                
+                
+                console.log("TEST", newNumber, currentFace, newFace, direction)
+                console.log("Pug83", currentFace, newFace, direction, number, newNumber)
+                
+            } else if (newFace === "right" && currentFace === "up" || currentFace === "left" && newFace === "down" ) {
+                // Handle the "down" direction //THis one seems to work for top -> right  
+                newNumber = transformNumber(number, "row", "col", false); 
+                console.log("TEST", newNumber, currentFace, newFace)
+                console.log("Pug84", currentFace, newFace, direction, number, newNumber)
+                
+            } else if (newFace === "left" && currentFace === "up" || newFace === "down" && currentFace === "right") {
                 newNumber = transformNumber(number, "col", "row", false);
-                console.log("TEST", newNumber)
-                break;
-            } 
+            }
+            break;
+
+        
        
         default:
             newNumber = (number + 1) % 9; // Default transformation
-            console.log("ERROR", newNumber, currentFace, newFace, direction) //TODO: Front down down still triggers this, fix that.
+            console.log("ERROR", newNumber, number, currentFace, newFace, direction) //TODO: Front down down still triggers this, fix that.
     }
-    console.log("OLD NUMBER", number, "NEW NUMBER", newNumber)
+    console.log("OLD NUMBER", number, "NEW NUMBER", newNumber, currentFace, direction)
     return { newFace, newNumber };
 }
 
 // Example usage
 
-console.log(getAdjacentFaceAndNumber("left", "down", 8)); // { newFace: "front", newNumber: 4 }
+
 
 
 
@@ -2430,24 +2461,30 @@ function transformNumber(number, swapSource, swapTarget, mirror = false) {
     return number; // Default: no transformation
 }
 
-console.log(transformNumber(2, "row", "col", false));
-console.log(transformNumber(5, "row", "col", false));
-console.log(transformNumber(4, "row", "col", false));
-console.log(transformNumber(1, "row", "col", false));
-console.log(transformNumber(6, "row", "col", true));
-console.log(transformNumber(6, "row", "col", false));
-console.log(transformNumber(2, "col", "row", false));
-console.log(transformNumber(8, "col", "row", false));
+
 //TODO: This seems to work perfect for L->U->R->D (if you go up, then first use row, then column, if you go down, first use col and then row)
 //TEST this extensively and then implement it aswell
 
 
 
 function checkDirectionResults(groupedResults, direction, blockNumber) {
+    console.log("dir check!")
     if (groupedResults && direction !== "Invalid input") {
       // Filter groupedResults for entries with matching newFace (direction)
       const matchingResults = groupedResults.filter(result => {
-        console.log(`Checking if result.newFace: ${result.newFace.trim()} matches direction: ${direction.trim()}`);
+        console.log(`Checking if result.newFace: ${result.newFace.trim()} matches direction: ${direction.trim()}`, result, result.numbers);
+        //TODO: right here, make it so that you essentially can translate the numbers, you have to use result.regularFace, result.newFace, and of course a foreach loop for the numbers, essentially you just want to translate them properly.
+        result.numbers = result.numbers.map(number => {
+            //console.log("Number test, 52", number, direction, getAdjacentFaceAndNumber(result.regularFace, getFaceRelation(result.newFace, result.regularFace).newNumber), result.regularFace, result.newFace);
+            const neoNumber = getAdjacentFaceAndNumber(result.regularFace, getFaceRelation(result.regularFace, result.newFace) , number).newNumber; //TODO: this seems to not be working entirely, there is an issue with the system, basically it comes down to the bottom block not correctly seeing the numbers. Same with the top, it doesn't use the proper numbers.
+            console.log("Pug Prime. Old number", number, "New number", neoNumber, "54", result.regularFace, result.newFace, getFaceRelation(result.newFace, result.regularFace), getAdjacentFaceAndNumber(result.regularFace, getFaceRelation(result.newFace, result.regularFace) , number).newNumber)
+            
+            return neoNumber; // Replace the number in the array
+        });
+
+        console.log("Pug Prime. 53", result.numbers, direction, blockNumber, groupedResults); //THis seems to work, it should translate the numbers when needed. to make sure everything works well location wise. This is really important for dangerzone recognition.
+
+
         return result.newFace.trim() === direction.trim();
       });
   
@@ -2460,12 +2497,25 @@ function checkDirectionResults(groupedResults, direction, blockNumber) {
       // If a matching result is found
       if (isNumberInResults) {
         // Loop through the matching results and check for the blockNumber
+        
         matchingResults.forEach(result => {
           // Check if the blockNumber is one of the numbers
-          if (result.numbers.includes(blockNumber)) {
-            const otherNumber = result.numbers.find(num => num !== blockNumber);
-            console.log(`The number ${blockNumber} is in a dangerzone and was chosen. The other number is ${otherNumber}.`);
+          const otherNumber = result.numbers.find(num => num !== blockNumber);
+            const content = document.querySelector(
+                `div#${faceToLetter(direction) + otherNumber}.block`
+            )
+            const contentCheck = content.textContent
+          if (result.numbers.includes(blockNumber) && contentCheck === "") {
+            
+            console.log(`The number ${blockNumber} is in a dangerzone and was chosen. The other number is ${otherNumber} Content: ${contentCheck}.`);
             priorityAi.push({ direction: direction, otherNumber: otherNumber });
+          } else {
+            console.log("FIX WORKS")
+            if (aiUnblockableMove === true) {
+                aiUnblockableMove = false
+                console.log("Rotation removed")
+                rotationData.shift();
+            }
           }
         });
       } else {
@@ -2482,7 +2532,15 @@ function checkDirectionResults(groupedResults, direction, blockNumber) {
   }
 
   function getFaceRelation(face1, face2) {
-    console.log(face1, face2)
+    console.log("Two face" , face1, face2) //TODO: This seems to not work properly, right right in Ai move returns a left rotation? No, works properly, the issue is that it doesn't send a left move, but that is because of how the face system works, in ai move III it should check how the back part gets moved to the right part, while this is not fully the case for some reason?
+    const replacements = { top: "up", bottom: "down" };
+
+    face1 = replacements[face1] || face1;
+    face2 = replacements[face2] || face2;
+
+    
+    console.log(face1, face2);
+    //TODO: For the proper rotation logic, convert bottom and top to up and down again, that usually works. Find a way to replace either face 1 or 2 if the result is bottom, and the same for if either result is top.
     const cubeMap = {
         front: { up: "up", down: "down", left: "left", right: "right" },
         back: { up: "up", down: "down", left: "right", right: "left" }, 
@@ -2504,7 +2562,7 @@ function checkDirectionResults(groupedResults, direction, blockNumber) {
     }
 
     // If no match is found, the faces are not adjacent
-    return "faces are not adjacent";
+    return "faces are not adjacent[", face1, face2;
 }
 function initializeLimitedSigns() {
     limitedSignsMode = true; //TODO: This one works, make it it's own mode
@@ -2515,9 +2573,12 @@ function initializeExponentOverwriteMode() {
 
 function changesForMajorityToWin(board) {
     const boardValues = board.map(cell => {
-        return typeof cell === 'string' ? cell : cell.innerText || '';
+        if (typeof cell === 'string' || cell === null) {
+            return cell; // Keep as is if already a string or explicitly null
+        }
+        return cell.innerText !== undefined ? cell.innerText : '';
     });
-    console.log("majority check ", boardValues)
+    //console.log("majority check ", boardValues)
     const winPatterns = [
         [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
         [0, 3, 6], [1, 4, 7], [2, 5, 8]  // Columns
@@ -2586,13 +2647,10 @@ function changesForMajorityToWin(board) {
 
     // Logging function for cleaner output
     function logResults() {
-        console.log("Parallel Conflicts:");
+    
         if (parallelConflicts.length > 0) {
             parallelConflicts.forEach(({ changeForX, changeForO }, index) => {
-                console.log(`Conflict ${index + 1}:`);
-                
-                console.log(`  X needs to change block ${changeForX.changeBlock} in pattern ${changeForX.winningPattern}`);
-                console.log(`  O needs to change block ${changeForO.changeBlock} in pattern ${changeForO.winningPattern}`);
+                console.log(`Conflict ${index + 1} ${dangerZoneCheck}:`);
                 console.log(changeForX.changeBlock, changeForO.changeBlock)
                 const changeX = changeForX.changeBlock;
                 const changeO = changeForO.changeBlock;
@@ -2604,68 +2662,110 @@ function changesForMajorityToWin(board) {
                 
                 // Calculate the difference
                 const difference = biggest - smallest;
-                const face = "front"
+                const face = mostRecentFace
                 const sharedArray = []
                 
                 // Check conditions
                 
-
+                let directions = ""
                 if (difference === 1 || difference === 2) {
-                    const directions = ["left", "right"];
-                    directions.forEach((direction) => {
-                        let XResult = getAdjacentFaceAndNumber(face, direction, changeX);
-                        let OResult = getAdjacentFaceAndNumber(face, direction, changeO);
-                
-                        const letter1 = document.querySelector(
-                            `div#${faceToLetter(XResult.newFace) + XResult.newNumber}.block`
-                        ).textContent;
-                        const letter2 = document.querySelector(
-                            `div#${faceToLetter(XResult.newFace) + OResult.newNumber}.block`
-                        ).textContent;
-                        const letter3 = document.querySelector(
-                            `div#${faceToLetter(
-                                XResult.newFace
-                            ) + findOtherNumber(XResult.newNumber, OResult.newNumber)}.block`
-                        ).textContent;
-                
-                        const numberMappings = [
-                            { number: changeX, value: letter1 },
-                            { number: changeO, value: letter2 },
-                            { number: otherBlock, value: letter3 },
-                        ];
-                
-                        const sortedMappings = numberMappings.sort((a, b) => a.number - b.number);
-                
-                        // Push the corresponding values into the shared array in the sorted order
-                        sortedMappings.forEach((mapping) => {
-                            sharedArray.push(mapping.value);
-                        });
-                
-                        console.log(sharedArray); // This should normally map them out correctly in the right order
-                
-                        const modifiedBoard = modifyRowOrColumn(boardValues, "row", determineRowOrColumn(changeX, changeO), sharedArray);
-                        sharedArray.length = 0;
-                        checkWin(modifiedBoard);
-                        console.log("Board with modified column:", modifiedBoard, modifiedBoard[0], checkWin(modifiedBoard));
-                    });
+                    directions = ["left", "right"];
+                    
                 } else if (difference === 3 || difference === 6) {
+                    //TODO: Although this also triggers for lower vertical danger zones, they do not get defended in the correct way for some reason.
                     console.log("vertical alter:", difference);
+                    directions = ["up", "down"];
+                    //TODO: transfer the horizontal code fully below this except for the direction code, then set the direction here to up and down, that way I save on the need of writing extra code.
                 }
+                directions.forEach((direction) => {
+                    let XResult = getAdjacentFaceAndNumber(face, direction, changeX);
+                    let OResult = getAdjacentFaceAndNumber(face, direction, changeO);
+                    console.log("Direction", direction, XResult, OResult)
+            
+                    const letter1 = document.querySelector(
+                        `div#${faceToLetter(XResult.newFace) + XResult.newNumber}.block`
+                    ).textContent;
+                    const letter2 = document.querySelector(
+                        `div#${faceToLetter(XResult.newFace) + OResult.newNumber}.block`
+                    ).textContent;
+                    const letter3 = document.querySelector(
+                        `div#${faceToLetter(
+                            XResult.newFace
+                        ) + findOtherNumber(XResult.newNumber, OResult.newNumber)}.block`
+                    ).textContent;
+            
+                    const numberMappings = [
+                        { number: changeX, value: letter1 },
+                        { number: changeO, value: letter2 },
+                        { number: otherBlock, value: letter3 },
+                    ];
+            
+                    const sortedMappings = numberMappings.sort((a, b) => a.number - b.number);
+            
+                    // Push the corresponding values into the shared array in the sorted order
+                    sortedMappings.forEach((mapping) => {
+                        sharedArray.push(mapping.value);
+                    });
+            
+                    console.log(sharedArray); // This should normally map them out correctly in the right order
+            
+                    const modifiedBoard = modifyRowOrColumn(boardValues, "row", determineRowOrColumn(changeX, changeO), sharedArray);
+                    sharedArray.length = 0;
+                    checkWin(modifiedBoard);
+                    console.log("Board with modified column:", modifiedBoard, modifiedBoard[0], checkWin(modifiedBoard));
+                    console.log(dangerZoneCheck.includes(changeO), dangerZoneCheck, face, "TESTIE") //TODO: For some reason with the dangerzones that don't add up dangerzonecheck is set to false.
+                    
+                    if (dangerZoneCheck.includes(changeO)) {
+                        directions.forEach((direction) => {
+                            
+                            console.log("Guest 82", direction)
+                            const squareInfo = getAdjacentFaceAndNumber(face, direction, changeO)
+                            console.log("Direction", direction, squareInfo)
+                            const content = document.querySelector(
+                                `div#${faceToLetter(squareInfo.newFace) + squareInfo.newNumber}.block`
+                            )
+                            const middleContent = document.querySelector(
+                                `div#${faceToLetter(squareInfo.newFace) + 4}.block`
+                            )
+                            const contentCheck = content.textContent
+                            if (contentCheck === "" && aiDefense === false && middleTactic === false && middleContent.textContent === "" ) {
+                                console.log("AI move III", direction, face, content.id, changeO, squareInfo, squareInfo.newFace, getFaceRelation(squareInfo.newFace, face))
+                                content.innerText = "O"
+                                aiDefense = true
+                                moveMade = true;  // Mark that a move has been made
+                                aiUnblockableMove = true
+                                rotationData.push([
+                                    content.id,                           // TODO: Find a way to properly set the block id here, you can't use content.id
+                                    getFaceRelation(squareInfo.newFace, face),    // Face relation //TODO: On the back this moves weirdly but now the square info stuff seems to mostly work for a decent setup.
+                                    false                                           // skipHistory flag
+                                ]);
+                                // Switch to the next player
+                                //currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+                                currentPlayer = players[currentPlayerIndex];
+                                console.log("Next turn: Player", currentPlayer);
+                                console.log("score update")
+                                updateScoreboard()
+                                
+                            }
+                        });
+                    }
+                    
+                });
             });
         } else {
             console.log("  None");
         }
 
-        console.log("\nNon-Conflicting Changes:");
-        console.log("  Changes for X:");
-        nonConflictingChanges.changesForX.forEach(({ changeBlock, winningPattern }, index) => {
-            console.log(`    ${index + 1}. Change block ${changeBlock} in pattern ${winningPattern}`);
-        });
+        //console.log("\nNon-Conflicting Changes:");
+        //console.log("  Changes for X:");
+        //nonConflictingChanges.changesForX.forEach(({ changeBlock, winningPattern }, index) => {
+            //console.log(`    ${index + 1}. Change block ${changeBlock} in pattern ${winningPattern}`);
+        //});
 
-        console.log("  Changes for O:");
-        nonConflictingChanges.changesForO.forEach(({ changeBlock, winningPattern }, index) => {
-            console.log(`    ${index + 1}. Change block ${changeBlock} in pattern ${winningPattern}`);
-        });
+        //console.log("  Changes for O:");
+        //nonConflictingChanges.changesForO.forEach(({ changeBlock, winningPattern }, index) => {
+            //console.log(`    ${index + 1}. Change block ${changeBlock} in pattern ${winningPattern}`);
+        //});
     }
 
     logResults();
@@ -2717,20 +2817,15 @@ function modifyRowOrColumn(board, type, index, values) {
 
 
 
-// Test:
-const board = [
-    'X', 'O', 'O',
-    'X', 'X', 'O',
-    'O', 'X', 'X'
-];
 
 
-console.log(changesForMajorityToWin(board));
+
+
 
 function faceToLetter (direction) {
     switch (direction) {
         case "up":
-            return 'u';
+            return 'u'; 
         case "left":
             return 'l';
            
@@ -2738,11 +2833,15 @@ function faceToLetter (direction) {
             return 'r';
            
         case "down":
-            return 'd';
+            return 'd'; 
         case "front":
             return 'f';
         case "back":
             return'b';
+        case "bottom":
+            return 'd'; 
+            case "top":
+        return 'u'; 
             
         default:
             return "Invalid input";
@@ -2780,7 +2879,7 @@ function findOtherNumber(number1, number2) {
 
 console.log(faceToLetter ("front"))
 console.log(findOtherNumber(0, 3))
-changesForMajorityToWin(board)
+//changesForMajorityToWin(board) TODO: check if you need this or not, I'm not sure
 function determineRowOrColumn(num1, num2) {
     // Validate inputs
     if (num1 < 0 || num1 > 8 || num2 < 0 || num2 > 8) {
@@ -2809,4 +2908,321 @@ function determineRowOrColumn(num1, num2) {
     return null;
 }
 
+function rotateAi() {
+    console.log("rotate ai", rotationData, rotationData.length, aiUnblockableMove)
+    if (rotationData.length === 1 && aiUnblockableMove === true && moveMade === false) {
+        console.log("Defend 2 check", rotationData[0], aiDefense)
+        if (document.querySelector(`div#${rotationData[0][0]}.block`).innerText == "O" | aiDefense ) {
+            console.log("HE did?", rotationData[0][0])
+            // Extract the first entry from the array
+            const [id, faceRelation, skipHistory] = rotationData[0];
+
+            // Trigger the function with the extracted values
+            getRowOrColumn(id, faceRelation, skipHistory);
+
+            // Remove the first entry from the array after use
+            console.log("Rotation removed")
+            rotationData.shift();
+            currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+            currentPlayer = players[currentPlayerIndex];
+            console.log("Next turn: Player", currentPlayer);
+            updateScoreboard();
+            noBreak = false
+            return;
+        } else if (document.querySelector(`div#${rotationData[0][0]}.block`).innerText == "") {
+            console.log("Player has tried to swipe it away but this revealed an empty block.")
+            document.querySelector(`div#${rotationData[0][0]}.block`).innerText = "O"
+        }
+    } else {
+        moveMade = false
+    }
+}
+
 console.log(determineRowOrColumn(0, 3))
+
+function nextDirection(current, direction) {
+    const arrows = ["right", "down", "left", "up"];
+    const reversedArrows = [...arrows].reverse(); // ["up", "left", "down", "right"]
+    
+    const directions = direction === "clockwise" ? arrows : reversedArrows;
+
+    let index = directions.indexOf(current);
+    if (index === -1) return null; // Handle invalid input
+
+    return directions[(index + 1) % directions.length]; // Move forward in the chosen array
+}
+
+function evaluateFacePriority() {
+        console.log("Evaluating priority EEEEEEEEEEEEEEE")
+        //TODO: for some reason this whole system seems to be broken, as a player you can  dupe it quit eeasily in a win for just that face, with the screenshot I took recently.
+        //There are mutliple ways this completely breaks down and enables wins for the players, make atleast the on face games solved, as these literally are solved.
+        //Also there is stil the bug of it playing pretty much always on the frontface instead of the face that the player actually plays on.
+        let priorityList = [];
+        const middleIndex = Math.floor(faces[0].length / 2); // Assuming all faces have the same board size
+        const middleSquare = faces[0][middleIndex];
+        const aiFirstMove = faces.every(face => 
+            Array.from(document.querySelectorAll(`.${face} .block`)).every(block => !block.innerText)
+        );
+    
+        // If it's the AI's first move, play in the middle if it's free
+        if (aiFirstMove && middleSquare === null) {
+            console.log("Middle")
+            return { face: faces[0], move: middleIndex }; 
+        }
+        let allHumanResults = []; // Array to store human results from all faces
+        let allAiResults = [];
+
+        for (let face of faces) {
+            let faceBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
+            let board = faceBlocks.map(block => block.innerText || null);
+            if (face === "front") {
+                console.log(face, board, "bobby yo")
+            }
+            
+            const aiResult = { ...minTurnsToWin(board, aiPlayer), face }; //TODO: This doesn't work properly, there is a 0 case in turns, because the  function checks it after the rotation for some reason this function checks right after a rotation in the ai logic, thus leading to it seeing a 0 turns to win move. which is weird.
+            const humanResult = { ...minTurnsToWin(board, humanPlayer), face };
+        
+            // Add the results to the combined array
+            console.log("bobby yo", aiResult, board, face)
+            allHumanResults.push(humanResult);
+            allAiResults.push(aiResult);
+        }
+        
+        // Find the minimum number of turns across all human results
+        const minTurnsPlayer = Math.min(...allHumanResults.map(result => result.turns));
+        const minTurnsAi = Math.min(...allAiResults.map(result => result.turns));
+        
+        // Filter the combined results to include only those with the minimum turns
+        filteredHumanResults = allHumanResults.filter(result => result.turns === minTurnsPlayer);
+        filteredAiResults = allAiResults.filter(result => result.turns === minTurnsAi);
+        
+        // Log the filtered results with face information
+        console.log("Filtered Human Results Across All Faces:", filteredHumanResults, filteredHumanResults[0]);
+        console.log("Filtered Ai Results Across All Faces:", filteredAiResults);
+        
+
+        for (let face of faces) {
+            let faceBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
+            let board = faceBlocks.map(block => block.innerText || null);
+    
+            const aiResult = minTurnsToWin(board, aiPlayer);
+            const humanResult = minTurnsToWin(board, humanPlayer); //This should get the highest proority number of all faces but right now due to how the return fuction etc works it just checks the first face that has signs each time
+            console.log("HUMAN TEST", humanResult)
+    
+            const middleIndex = Math.floor(board.length / 2); // Assuming the board has a single middle square
+            const cornerIndices = [0, board.length - 1, Math.sqrt(board.length) - 1, board.length - Math.sqrt(board.length)];
+    
+            // Check if the player played in a corner and the middle is empty
+            if (cornerIndices.some(index => board[index] === humanPlayer) && board[middleIndex] === null && filteredHumanResults[0].turns !== 1) {
+                // Prioritize the middle if it's empty
+                console.log("Special")
+                console.log("no priority list")
+                return { face, move: middleIndex };
+            }
+    
+            if (playerMiddle === true) {
+                console.log("poglini, player middle", face, blockNumber, "pug") //TODO: The issue seems to be that for some reason this work properly, it think that if you put it anywhere in the middle it should put it in the front.
+                // Check if the player can win in one move
+                if (filteredHumanResults[0].turns === 1) {
+                    // Block the player's winning move
+                    playerMiddle = false; // Reset the flag
+                    playerMiddleArray = []
+                    console.log("Special")
+                    console.log("no priority list")
+                    return { face, move: humanResult.pattern.find(index => board[index] === null) }; //TODO: This face is not correct
+                }
+    
+                // Otherwise, check for corners
+                playerMiddle = false; // Reset the flag
+                
+                for (const cornerIndex of cornerIndices) {
+                    if (board[cornerIndex] === null) {
+                        console.log("Special", playerMiddleArray[0])
+                        if (playerMiddleArray[0] === "up") {
+                            playerMiddleArray[0] = "top";
+                        } else if (playerMiddleArray[0] === "down") {
+                            playerMiddleArray[0] = "bottom";
+                        }
+                        
+                        face = playerMiddleArray[0]
+                        playerMiddleArray = []
+                        console.log("no priority list")
+                        return { face, move: cornerIndex }; // Pick the first available corner, TODO: because of a mistake right now this always picks the same corner
+                    }
+                }
+                
+            }
+
+            if (blockNumber === 5 || blockNumber === 3) {
+               
+                const content = document.querySelector(
+                    `div#${faceToLetter(face) + (blockNumber -3)}.block`
+                )
+                console.log("Early test to make ai really unbeatable on each individual face.", (blockNumber -3), face, content.textContent, filteredHumanResults[0].turns) 
+                if (content.textContent === "" && filteredHumanResults[0].turns !== 1) {
+                    return { face, move: (blockNumber - 3) }
+                }
+                
+            }
+            if (blockNumber === 7) {
+                const block0 = document.querySelector(`div#${faceToLetter(face)}0.block`);
+                const block2 = document.querySelector(`div#${faceToLetter(face)}2.block`);
+                const block4 = document.querySelector(`div#${faceToLetter(face)}4.block`);
+                const lastBlock = document.querySelector(
+                    `div#${faceToLetter(face) + (blockNumber - 6)}.block`
+                );
+            
+                // Check if block 4 is either empty or an "O"
+                const canSwitch = block4.textContent === "" || block4.textContent === "O";
+            
+                if (canSwitch) {
+                    if (block0.textContent === "O" && block2.textContent === "") {
+                        return { face, move: 2 };
+                    } else if (block2.textContent === "O" && block0.textContent === "") {
+                        return { face, move: 0 };
+                    }
+                }
+            
+                // If block 4 prevents switching, or no valid switch found, fill the last block
+                if (lastBlock.textContent === "" && filteredHumanResults[0].turns !== 1) {
+                    return { face, move: blockNumber - 6 };
+                }
+            }
+            
+            
+
+    
+            // Check for future winning moves (both 1-turn and 2-turn)
+            let blockingMove = null;
+
+            if (filteredAiResults[0].turns === 1 | rotationData.length === 1) {
+                console.log("Check, immediate win AI")
+                faceBlocks = Array.from(document.querySelectorAll(`.${filteredAiResults[0].face} .block`));
+                //board = faceBlocks.map(block => block.innerText || null);
+                // AI can win immediately
+                console.log("no priority list")
+                if (rotationData.length === 1 && filteredAiResults[0].turns > 1) {
+                    //TODO: The problem here is that if the ai has a easier win it won't use this, so make it like check if there isn't something where it can win close to instantly.
+                    console.log("Rotate ai", rotationData, "faceprioriy")
+                    rotateAi()
+                } else {
+                    console.log("Rotation data length", rotationData.length)
+                    return {
+                        face: filteredAiResults[0].face, 
+                        move: filteredAiResults[0].pattern.find(index => board[index] === null) };
+                }
+            } else {
+                console.log("Fail", rotationData)
+            }
+
+            
+            if (filteredHumanResults[0].turns === 1) {
+                console.log("Check, immediate win player", filteredHumanResults[0])
+                // Block immediate winning move
+                faceBlocks = Array.from(document.querySelectorAll(`.${filteredHumanResults[0].face} .block`));
+                //board = faceBlocks.map(block => block.innerText || null); //TODO: Commenting this out seems to do the trick, otherwise upon the ai rotating it back it wouldn"t see the correct stuff.
+                
+                blockingMove = filteredHumanResults[0].pattern.find(index => board[index] === null);
+                console.log("Special", JSON.stringify(blockingMove), board, face, filteredHumanResults[0], allHumanResults)
+            } else if (filteredHumanResults.turns === 2) {
+                // Check for future winning move (2 turns)
+                faceBlocks = Array.from(document.querySelectorAll(`.${filteredHumanResults[0].face} .block`));
+                board = faceBlocks.map(block => block.innerText || null);
+                
+                blockingMove = filteredHumanResults[0].pattern.find(index => board[index] === null);
+                console.log("Special", blockingMove, humanResult)
+            }
+    
+            // If we find a blocking move (either 1-turn or 2-turn threat), block it
+            if (blockingMove !== null) {
+                console.log("Special")
+                return {
+                    face: filteredHumanResults[0].face, 
+                    move: blockingMove };
+            }
+    
+            // Check if the AI can win in the next move
+           
+    
+            if (filteredHumanResults[0].turns === 1) {
+                console.log("Check, immediate win player")
+                faceBlocks = Array.from(document.querySelectorAll(`.${filteredHumanResults[0].face} .block`));
+                board = faceBlocks.map(block => block.innerText || null);
+                // Human can win in one move, block it
+                console.log("no priority list")
+                return {
+                    face: filteredHumanResults[0].face, 
+                    move: filteredHumanResults[0].pattern.find(index => board[index] === null) };
+            }
+    
+            // If the human has a 2-turn winning opportunity, prioritize blocking that
+            if (filteredHumanResults[0].turns === 2) {
+                console.log("Check, incoming win Player")
+                // Human can win in two moves, consider blocking
+                faceBlocks = Array.from(document.querySelectorAll(`.${filteredHumanResults[0].face} .block`));
+                board = faceBlocks.map(block => block.innerText || null);
+                console.log("Potentially hard move to stop? put on a adjacent face, be warned, this can be undefined so you'll have to keep that in mind aswell" ,changesForMajorityToWin(board).nonConflictingChanges.changesForO[0]?.changeBlock)
+                return { 
+                    face: filteredHumanResults[0].face, 
+                    move: filteredHumanResults[0].pattern.find(index => board[index] === null),
+                }
+               
+            }
+    
+            // If the AI has a 2-turn winning opportunity, prioritize setting up that win
+            if (filteredAiResults.turns === 2) {
+                console.log("Check, incoming win AI")
+                // AI can win in two moves, consider setting up
+                faceBlocks = Array.from(document.querySelectorAll(`.${filteredAiResults[0].face} .block`));
+                board = faceBlocks.map(block => block.innerText || null);
+                return { 
+                    face: filteredAiResults[0].face, 
+                    move: filteredAiResults[0].pattern.find(index => board[index] === null),
+                }
+            }
+        }
+    
+        // Sort by priority (higher priority first)
+        //priorityList.sort((a, b) => b.priority - a.priority);
+    
+        // Return the highest priority move
+        console.log("Priority puggy", priorityList)
+        filteredHumanResults = []
+        filteredAiResults = []
+        return priorityList.length > 0 ? priorityList[0] : null;
+    }
+
+    function minTurnsToWin(board, player) {
+        const winPatterns = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8],
+            [0, 3, 6], [1, 4, 7], [2, 5, 8],
+            [0, 4, 8], [2, 4, 6]
+        ];
+
+        console.log("MINTURNS TRIGGERED")
+
+
+        let minTurns = Infinity;
+        let winningPattern = [];
+
+        for (const pattern of winPatterns) {
+            const playerMoves = pattern.filter(index => board[index] === player).length;
+            const emptySpaces = pattern.filter(index => board[index] === null).length;
+
+            if (playerMoves + emptySpaces === 3) {
+                if (emptySpaces < minTurns) {
+                    minTurns = emptySpaces;
+                    if (player === "O") {
+                        console.log("Minturns test ", minTurns, board, player)
+                    }
+                    if (minTurns === 1) {
+                        console.log("Minturns test", minTurns, board, player) //Potentially this returns no 1 for the ai because it makes a move before? check that out.
+                    }
+                        winningPattern = pattern;
+                }
+            }
+        }
+
+        return minTurns === Infinity ? { turns: -1, pattern: [] } : { turns: minTurns, pattern: winningPattern };
+    }
+
