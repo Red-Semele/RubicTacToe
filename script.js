@@ -2291,6 +2291,87 @@ function aiMove() {
         const priorityMove = evaluateFacePriority();
         console.log(priorityMove, "priority")
 
+        // Helper: detect if AI has exactly 2 'O's and 1 'X' in a win pattern on a face
+        function detectBlockedTwoOnFace(face) {
+            if (!face) return null;
+            const faceClass = face.length === 1 ? (face === 'u' ? 'top' : (face === 'd' ? 'bottom' : ({f:'front',b:'back',l:'left',r:'right'})[face])) : (face === 'up' ? 'top' : (face === 'down' ? 'bottom' : face));
+            const faceBlocks = Array.from(document.querySelectorAll(`.${faceClass} .block`));
+            const board = faceBlocks.map(b => b.innerText || null);
+            const winPatterns = [
+                [0, 1, 2], [3, 4, 5], [6, 7, 8],
+                [0, 3, 6], [1, 4, 7], [2, 5, 8],
+                [0, 4, 8], [2, 4, 6]
+            ];
+
+            for (const pattern of winPatterns) {
+                const oCount = pattern.filter(i => board[i] === 'O').length;
+                const xCount = pattern.filter(i => board[i] === 'X').length;
+                if (oCount === 2 && xCount === 1) {
+                    const blockedIndex = pattern.find(i => board[i] === 'X');
+                    return { blockedIndex, pattern };
+                }
+            }
+            return null;
+        }
+
+        // Helper: try to setup rotation for a given face+blockedIndex (returns true if placed)
+        function setupRotationForFace(face, blockedIndex) {
+            try {
+                const directions = ['left', 'right', 'up', 'down'];
+                for (const dir of directions) {
+                    try {
+                        const adj = getAdjacentFaceAndNumber(face, dir, blockedIndex);
+                        const adjFace = adj.newFace;
+                        const adjNumber = adj.newNumber;
+                        const adjFaceClass = adjFace === 'up' ? 'top' : (adjFace === 'down' ? 'bottom' : adjFace);
+                        const adjBlocks = Array.from(document.querySelectorAll(`.${adjFaceClass} .block`));
+                        if (adjBlocks[adjNumber] && (adjBlocks[adjNumber].innerText || '').trim() === '') {
+                            // Place AI marker on adjacent free spot and queue rotation
+                            adjBlocks[adjNumber].innerText = 'O';
+                            aiUnblockableMove = true;
+                            rotationData.push([
+                                adjBlocks[adjNumber].id,
+                                getFaceRelation(adjFace, mostRecentFace),
+                                false
+                            ]);
+                            console.log('Immediate queued rotation-based unblock for face', face, 'blockedIndex', blockedIndex, '->', adjFace, adjNumber, rotationData);
+                            currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+                            currentPlayer = players[currentPlayerIndex];
+                            updateScoreboard();
+                            return true;
+                        }
+                    } catch (e) {
+                        continue; // try next direction
+                    }
+                }
+            } catch (e) {
+                console.log('Error in setupRotationForFace', e);
+            }
+            return false;
+        }
+
+        // If AI has a blocked two on the most recent face and there's no priority that forces play on that face,
+        // immediately set up the rotation-based unblock instead of stalling.
+        const normalizedRecentFace = (mostRecentFace && mostRecentFace.length === 1) ? ({f:'front',b:'back',l:'left',r:'right',u:'up',d:'down'})[mostRecentFace] : mostRecentFace;
+        const blockedInfo = detectBlockedTwoOnFace(normalizedRecentFace);
+        if (blockedInfo) {
+            // Determine if there's an urgent reason NOT to setup rotation: immediate AI win or immediate player win
+            const aiImmediateWin = Array.isArray(filteredAiResults) && filteredAiResults[0] && typeof filteredAiResults[0].turns === 'number' && filteredAiResults[0].turns <= 1;
+            const playerImmediateWin = Array.isArray(filteredHumanResults) && filteredHumanResults[0] && typeof filteredHumanResults[0].turns === 'number' && filteredHumanResults[0].turns === 1;
+            const priorityOnSameFace = priorityMove && priorityMove.face === normalizedRecentFace;
+
+            const shouldSkipBecausePriority = aiImmediateWin || playerImmediateWin || priorityOnSameFace;
+
+            if (!shouldSkipBecausePriority) {
+                const didSetup = setupRotationForFace(normalizedRecentFace, blockedInfo.blockedIndex);
+                if (didSetup) {
+                    console.log('AI immediately set up rotation for blocked two on recent face', normalizedRecentFace);
+                    // We've made the move and queued rotation; don't continue with other move logic
+                    return;
+                }
+            }
+        }
+
         if (priorityMove) {
             // Make the move based on priority evaluation
             const faceBlocks = Array.from(document.querySelectorAll(`.${priorityMove.face} .block`));
