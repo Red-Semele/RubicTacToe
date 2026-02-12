@@ -45,7 +45,79 @@ let noBreak = false
 let aiMode = false //TODO: In the ai mode, for some reason 1. After the first game on by the ai if it rotates the rows the color's don't update. also if you play from the top it's logic isn't entirely correct.
 let limitedSignsMode = false
 let exponentOverwriteMode = false;
+let optimalMoveEnabled = false;
+let optimalMoveElement = null;
+let plannedRotationHint = null;
 const rotationData = [];
+const moveHistory = [];
+let replayMode = false;
+let replayBaseState = null;
+const replayState = {
+    active: false,
+    playing: false,
+    index: 0,
+    moves: [],
+    baseState: null,
+    timer: null
+};
+
+// Helper to add a rotation entry with validation and logging
+function addRotationEntry(id, faceRelation, skipHistory = false) {
+    try {
+        if (!id || typeof id !== 'string') {
+            console.log('addRotationEntry: invalid id', id);
+            return false;
+        }
+
+        // Normalize id to the canonical single-letter + digit format (e.g., 'f4')
+        const faceNameMap = { front: 'f', back: 'b', left: 'l', right: 'r', top: 'u', bottom: 'd', up: 'u', down: 'd' };
+        let normalizedId = null;
+        // Try to match patterns like 'f4' or 'front4' or 'front_4' or 'div#f4'
+        const idMatch = id.toString().toLowerCase().match(/(front|back|left|right|top|bottom|up|down|[fbrlud])[^0-9]*([0-8])/i);
+        if (idMatch) {
+            const facePart = idMatch[1];
+            const numPart = idMatch[2];
+            const letter = faceNameMap[facePart] || (facePart.length === 1 ? facePart : null);
+            if (letter && numPart !== undefined) {
+                normalizedId = `${letter}${numPart}`;
+            }
+        }
+
+        if (!normalizedId) {
+            console.log('addRotationEntry: could not normalize id', id);
+            return false;
+        }
+
+        const validDirections = new Set(['left', 'right', 'up', 'down']);
+        let dir = faceRelation;
+        if (!dir || typeof dir !== 'string' || !validDirections.has(dir)) {
+            // Try to coerce/normalize if possible
+            try {
+                // If faceRelation seems to be a face name, attempt to compute relation to mostRecentFace
+                if (typeof faceRelation === 'string' && faces.includes(faceRelation)) {
+                    dir = getFaceRelation(faceRelation, mostRecentFace);
+                } else {
+                    dir = String(faceRelation || '').toLowerCase();
+                }
+            } catch (e) {
+                dir = String(faceRelation || '');
+            }
+        }
+
+        if (!validDirections.has(dir)) {
+            console.log('addRotationEntry: computed invalid direction, will not queue rotation', { id, faceRelation, computed: dir });
+            return false;
+        }
+
+        // Store entries as [currentId, dir, skipHistory, originalId, retryCount]
+        rotationData.push([normalizedId, dir, !!skipHistory, normalizedId, 0]);
+        console.log('addRotationEntry: queued', { id: normalizedId, dir, skipHistory: !!skipHistory });
+        return true;
+    } catch (e) {
+        console.log('addRotationEntry error', e);
+        return false;
+    }
+}
 
 
 
@@ -55,6 +127,64 @@ function rotateCube(deltaX, deltaY) {
     rotationX += deltaX;
     rotationY += deltaY;
     cube.style.transform = `rotateX(${rotationX}deg) rotateY(${rotationY}deg)`;
+}
+
+function setupCubeDragArea() {
+    const dragArea = document.getElementById('cubeDragArea');
+    if (!dragArea) return;
+
+    let dragging = false;
+    let lastX = 0;
+    let lastY = 0;
+    const sensitivity = 0.4;
+
+    const onStart = (x, y) => {
+        dragging = true;
+        lastX = x;
+        lastY = y;
+    };
+
+    const onMove = (x, y) => {
+        if (!dragging) return;
+        const dx = x - lastX;
+        const dy = y - lastY;
+        rotateCube(dy * sensitivity, dx * sensitivity);
+        lastX = x;
+        lastY = y;
+    };
+
+    const onEnd = () => {
+        dragging = false;
+    };
+
+    dragArea.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        onStart(event.clientX, event.clientY);
+    });
+
+    document.addEventListener('mousemove', (event) => {
+        onMove(event.clientX, event.clientY);
+    });
+
+    document.addEventListener('mouseup', () => {
+        onEnd();
+    });
+
+    dragArea.addEventListener('touchstart', (event) => {
+        event.preventDefault();
+        if (!event.touches || !event.touches[0]) return;
+        onStart(event.touches[0].clientX, event.touches[0].clientY);
+    }, { passive: false });
+
+    dragArea.addEventListener('touchmove', (event) => {
+        event.preventDefault();
+        if (!event.touches || !event.touches[0]) return;
+        onMove(event.touches[0].clientX, event.touches[0].clientY);
+    }, { passive: false });
+
+    dragArea.addEventListener('touchend', () => {
+        onEnd();
+    });
 }
 
 // Event listener for arrow keys
@@ -81,6 +211,12 @@ document.addEventListener('keydown', (event) => {
         case 'u':
             // Listen for 'u' key press to trigger undo
             undoLastMove();
+            break;
+        case 'D':
+        case 'd':
+            if (event.shiftKey) {
+                toggleOptimalMoveHint();
+            }
             break;
             
     }
@@ -446,6 +582,9 @@ function initializeGame(mode = "classic", numPlayers = 2) {
     currentPlayer = players[currentPlayerIndex];
     console.log(`Game initialized in ${mode} mode with players: ${players.join(", ")}`);
     updateScoreboard(); // Initialize the scoreboard display
+    moveHistory.length = 0;
+    setReplayBaseState();
+    refreshReplayUI();
 }
 
 
@@ -470,10 +609,846 @@ function updateScoreboard() {
 
         scoreboard.appendChild(playerScoreElement);
     });
+
+    updateOptimalMoveHint();
+}
+
+function ensureOptimalMoveElement() {
+    if (optimalMoveElement) return;
+
+    optimalMoveElement = document.createElement('div');
+    optimalMoveElement.id = 'optimalMoveHint';
+    optimalMoveElement.style.marginTop = '10px';
+    optimalMoveElement.style.fontSize = '1rem';
+    optimalMoveElement.style.color = '#333';
+    optimalMoveElement.style.display = 'none';
+
+    const scoreboard = document.getElementById('scoreboard');
+    if (scoreboard && scoreboard.parentNode) {
+        scoreboard.parentNode.insertBefore(optimalMoveElement, scoreboard.nextSibling);
+    } else {
+        document.body.appendChild(optimalMoveElement);
+    }
+}
+
+function toggleOptimalMoveHint() {
+    optimalMoveEnabled = !optimalMoveEnabled;
+    updateOptimalMoveHint();
+}
+
+function updateOptimalMoveHint() {
+    ensureOptimalMoveElement();
+
+    if (!optimalMoveEnabled) {
+        optimalMoveElement.style.display = 'none';
+        return;
+    }
+
+    const suggestion = getOptimalMoveSuggestion(currentPlayer);
+    optimalMoveElement.style.display = 'block';
+
+    if (!suggestion) {
+        optimalMoveElement.innerText = `Optimal move for ${currentPlayer}: no legal moves`;
+        return;
+    }
+
+    if (suggestion.noticeMessage) {
+        optimalMoveElement.innerText = `Optimal move for ${currentPlayer}: ${suggestion.noticeMessage}`;
+        return;
+    }
+
+    optimalMoveElement.innerText = `Optimal move for ${currentPlayer}: ${suggestion.face} ${suggestion.move} (${suggestion.reason})`;
+}
+
+function snapshotCubeState() {
+    const blocks = Array.from(document.querySelectorAll('.block'));
+    const blockState = blocks.map(block => ({
+        id: block.id,
+        text: block.innerText,
+        color: block.getAttribute('data-color')
+    }));
+
+    const historyClone = {};
+    Object.keys(blockHistory).forEach(key => {
+        historyClone[key] = Array.isArray(blockHistory[key]) ? [...blockHistory[key]] : blockHistory[key];
+    });
+
+    return { blockState, historyClone };
+}
+
+function restoreCubeState(snapshot) {
+    if (!snapshot) return;
+
+    snapshot.blockState.forEach(state => {
+        const block = document.getElementById(state.id);
+        if (!block) return;
+        block.innerText = state.text;
+        block.setAttribute('data-color', state.color);
+    });
+
+    Object.keys(blockHistory).forEach(key => {
+        delete blockHistory[key];
+    });
+    Object.keys(snapshot.historyClone).forEach(key => {
+        blockHistory[key] = Array.isArray(snapshot.historyClone[key]) ? [...snapshot.historyClone[key]] : snapshot.historyClone[key];
+    });
+
+    updateBlockColors();
+}
+
+function snapshotFullState() {
+    return {
+        cubeSnapshot: snapshotCubeState(),
+        players: Array.isArray(players) ? [...players] : [],
+        playerWins: Array.from(playerWins.entries()),
+        currentPlayerIndex,
+        currentPlayer,
+        rotationX,
+        rotationY,
+        delayedWin,
+        limitedSignsMode,
+        exponentOverwriteMode,
+        aiMode,
+        moveHistory: moveHistory.map(entry => ({ ...entry }))
+    };
+}
+
+function applyFullState(state, options = {}) {
+    if (!state) return;
+    const { preserveMoveHistory = false } = options;
+
+    if (state.cubeSnapshot) {
+        restoreCubeState(state.cubeSnapshot);
+    }
+
+    if (Array.isArray(state.players) && state.players.length > 0) {
+        players = [...state.players];
+    }
+    if (Array.isArray(state.playerWins)) {
+        playerWins = new Map(state.playerWins);
+    }
+
+    if (typeof state.currentPlayerIndex === 'number') {
+        currentPlayerIndex = state.currentPlayerIndex;
+        currentPlayer = players[currentPlayerIndex] || players[0];
+    } else if (typeof state.currentPlayer === 'string') {
+        currentPlayer = state.currentPlayer;
+        currentPlayerIndex = players.indexOf(currentPlayer);
+        if (currentPlayerIndex < 0) currentPlayerIndex = 0;
+    }
+
+    if (typeof state.rotationX === 'number') rotationX = state.rotationX;
+    if (typeof state.rotationY === 'number') rotationY = state.rotationY;
+    cube.style.transform = `rotateX(${rotationX}deg) rotateY(${rotationY}deg)`;
+
+    if (typeof state.delayedWin === 'boolean') delayedWin = state.delayedWin;
+    if (typeof state.limitedSignsMode === 'boolean') limitedSignsMode = state.limitedSignsMode;
+    if (typeof state.exponentOverwriteMode === 'boolean') exponentOverwriteMode = state.exponentOverwriteMode;
+    if (typeof state.aiMode === 'boolean') aiMode = state.aiMode;
+
+    if (!preserveMoveHistory) {
+        moveHistory.length = 0;
+        if (Array.isArray(state.moveHistory)) {
+            state.moveHistory.forEach(entry => moveHistory.push({ ...entry }));
+        }
+    }
+
+    updateScoreboard();
+}
+
+function setReplayBaseState() {
+    replayBaseState = snapshotFullState();
+    if (replayBaseState) {
+        replayBaseState.moveHistory = [];
+    }
+}
+
+function encodeStateToString(state) {
+    const json = JSON.stringify(state);
+    return btoa(unescape(encodeURIComponent(json)));
+}
+
+function decodeStateFromString(value) {
+    const json = decodeURIComponent(escape(atob(value)));
+    return JSON.parse(json);
+}
+
+function exportCubeState() {
+    try {
+        if (!replayBaseState) {
+            setReplayBaseState();
+        }
+        const payload = {
+            version: 1,
+            state: snapshotFullState(),
+            replayBaseState: replayBaseState || null
+        };
+        const encoded = encodeStateToString(payload);
+        const input = document.getElementById('cubeStateInput');
+        if (input) input.value = encoded;
+    } catch (e) {
+        console.error('exportCubeState failed', e);
+    }
+}
+
+function importCubeState() {
+    const input = document.getElementById('cubeStateInput');
+    if (!input || !input.value) return;
+
+    try {
+        const payload = decodeStateFromString(input.value.trim());
+        if (!payload || !payload.state) return;
+
+        stopReplay();
+        applyFullState(payload.state);
+        replayBaseState = payload.replayBaseState || null;
+        if (!replayBaseState) {
+            setReplayBaseState();
+        }
+        notifyMoveHistoryUpdated();
+    } catch (e) {
+        console.error('importCubeState failed', e);
+    }
+}
+
+function startReplaySessionIfNeeded() {
+    if (!replayState.baseState) {
+        replayState.baseState = replayBaseState ? JSON.parse(JSON.stringify(replayBaseState)) : snapshotFullState();
+    }
+    replayState.moves = moveHistory.map(entry => ({ ...entry }));
+    replayState.active = true;
+    replayMode = true;
+    refreshReplayUI();
+}
+
+function applyPlacementFromHistory(entry) {
+    const block = document.getElementById(entry.blockId);
+    if (!block) return;
+    const previous = block.innerText;
+    if (previous !== '') {
+        if (!blockHistory[block.id]) blockHistory[block.id] = [];
+        blockHistory[block.id].push(previous);
+    }
+    block.innerText = entry.placedText || entry.player || '';
+}
+
+function applyReplayMove(entry) {
+    if (!entry || !entry.type) return;
+
+    if (entry.type === 'placement') {
+        applyPlacementFromHistory(entry);
+        updateScoreboard();
+        nextTurn();
+        return;
+    }
+
+    if (entry.type === 'swipe') {
+        const id = `${entry.face}${entry.row * 3 + entry.col}`;
+        getRowOrColumn(id, entry.direction, true);
+    }
+}
+
+function applyReplayIndex(targetIndex) {
+    if (!replayState.baseState) return;
+
+    replayMode = true;
+    applyFullState(replayState.baseState, { preserveMoveHistory: true });
+
+    for (let i = 0; i < targetIndex; i++) {
+        applyReplayMove(replayState.moves[i]);
+    }
+
+    replayState.index = targetIndex;
+    refreshReplayUI();
+}
+
+function stepReplay(delta) {
+    startReplaySessionIfNeeded();
+    stopReplayPlayback();
+    const nextIndex = Math.max(0, Math.min(replayState.moves.length, replayState.index + delta));
+    applyReplayIndex(nextIndex);
+}
+
+function toggleReplayPlay() {
+    startReplaySessionIfNeeded();
+    if (replayState.playing) {
+        stopReplayPlayback();
+        return;
+    }
+
+    replayState.playing = true;
+    replayState.timer = setInterval(() => {
+        if (replayState.index >= replayState.moves.length) {
+            stopReplayPlayback();
+            return;
+        }
+        applyReplayIndex(replayState.index + 1);
+    }, 600);
+    refreshReplayUI();
+}
+
+function stopReplayPlayback() {
+    if (replayState.timer) {
+        clearInterval(replayState.timer);
+        replayState.timer = null;
+    }
+    replayState.playing = false;
+    refreshReplayUI();
+}
+
+function stopReplay() {
+    stopReplayPlayback();
+    if (replayState.active) {
+        commitReplayBranch();
+    }
+    replayState.baseState = null;
+    replayState.active = false;
+    replayMode = false;
+    refreshReplayUI();
+}
+
+function commitReplayBranch() {
+    if (!replayState.active) return;
+    stopReplayPlayback();
+    if (replayState.index < replayState.moves.length) {
+        moveHistory.splice(replayState.index);
+    }
+    replayState.moves = moveHistory.map(entry => ({ ...entry }));
+    replayState.active = false;
+    replayMode = false;
+    refreshReplayUI();
+}
+
+function refreshReplayUI() {
+    const slider = document.getElementById('replaySlider');
+    const label = document.getElementById('replayStepLabel');
+    const playBtn = document.getElementById('replayPlayBtn');
+    if (!slider || !label) return;
+
+    const total = replayState.moves.length;
+    slider.max = total;
+    slider.value = replayState.index;
+    label.textContent = `${replayState.index}/${total}`;
+    if (playBtn) {
+        playBtn.textContent = replayState.playing ? 'Pause' : 'Play';
+    }
+}
+
+function notifyMoveHistoryUpdated() {
+    if (replayState.active) return;
+    replayState.moves = moveHistory.map(entry => ({ ...entry }));
+    replayState.index = replayState.moves.length;
+    refreshReplayUI();
+}
+
+function setupReplayControls() {
+    const slider = document.getElementById('replaySlider');
+    if (!slider) return;
+    slider.addEventListener('input', () => {
+        startReplaySessionIfNeeded();
+        const nextIndex = parseInt(slider.value, 10) || 0;
+        applyReplayIndex(nextIndex);
+    });
+    refreshReplayUI();
+}
+
+function getImmediateWinningMoves(board, player) {
+    const moves = new Set();
+    for (const pattern of winningCombinations) {
+        const values = pattern.map(index => board[index]);
+        const playerCount = values.filter(value => value === player).length;
+        const emptyCount = values.filter(value => value === null).length;
+        if (playerCount === 2 && emptyCount === 1) {
+            const emptyIndex = pattern.find(index => board[index] === null);
+            if (typeof emptyIndex === 'number') moves.add(emptyIndex);
+        }
+    }
+    return Array.from(moves.values());
+}
+
+function getRotationSetupHint(player) {
+    const opponentSet = new Set(players.filter(p => p !== player));
+    const directions = ['up', 'down', 'left', 'right'];
+    const isDiagonalPattern = (pattern) =>
+        (pattern[0] === 0 && pattern[1] === 4 && pattern[2] === 8) ||
+        (pattern[0] === 2 && pattern[1] === 4 && pattern[2] === 6);
+    const orderedPatterns = [...winningCombinations].sort((a, b) => {
+        const aDiag = isDiagonalPattern(a) ? 0 : 1;
+        const bDiag = isDiagonalPattern(b) ? 0 : 1;
+        return aDiag - bDiag;
+    });
+
+    const opponentsHaveImmediateWin = () => {
+        for (const opponent of opponentSet) {
+            for (const face of faces) {
+                const blocks = Array.from(document.querySelectorAll(`.${face} .block`));
+                const board = blocks.map(block => block.innerText || null);
+                const result = minTurnsToWin(board, opponent);
+                if (result && result.turns === 1) return true;
+            }
+        }
+        return false;
+    };
+
+    for (const face of faces) {
+        const blocks = Array.from(document.querySelectorAll(`.${face} .block`));
+        const board = blocks.map(block => block.innerText || null);
+
+        for (const pattern of orderedPatterns) {
+            const values = pattern.map(index => board[index]);
+            const playerCount = values.filter(value => value === player).length;
+            //const opponentCount = values.filter(value => opponentSet.has(value)).length;
+            //const emptyCount = values.filter(value => value === null).length;
+
+            if (playerCount === 2) {
+                const blockedIndex = pattern.find(index => board[index] !== player);
+                console.log("Brent test blockedIndex", blockedIndex)
+                if (typeof blockedIndex !== 'number') continue;
+
+                const playerIndices = pattern.filter(index => board[index] === player);
+                if (playerIndices.length !== 2) continue;
+                let candidateDirections = directions;
+                if (isDiagonalPattern(pattern)) {
+                    const blockedRow = Math.floor(blockedIndex / 3);
+                    const preferred = blockedRow === 0 ? 'down' : (blockedRow === 2 ? 'up' : null);
+                    if (preferred) {
+                        candidateDirections = [preferred, ...directions.filter(dir => dir !== preferred)];
+                    }
+                }
+
+                for (const dir of candidateDirections) {
+                    try {
+                        const adj = getAdjacentFaceAndNumber(face, dir, blockedIndex);
+                        if (!adj || !adj.newFace || adj.newNumber === null || Number.isNaN(adj.newNumber)) continue;
+
+                        const adjFace = adj.newFace === 'up' ? 'top' : (adj.newFace === 'down' ? 'bottom' : adj.newFace);
+                        const adjBlocks = Array.from(document.querySelectorAll(`.${adjFace} .block`));
+                        const targetBlock = adjBlocks[adj.newNumber];
+                        if (!targetBlock) continue;
+
+                        const targetText = (targetBlock.innerText || '').trim();
+                        if (targetText !== '' && targetText !== player) continue;
+
+                        const rotationDir = getFaceRelation(adj.newFace, face);
+                        const rotationId = `${faceToLetter(adj.newFace)}${adj.newNumber}`;
+                        const rotationDescriptor = getRotationDescriptorFromMove(rotationId, rotationDir);
+                        if (!rotationDescriptor) continue;
+
+                        const snapshot = snapshotCubeState();
+                        if (targetText === '') {
+                            targetBlock.innerText = player;
+                        }
+                        applyRotationDescriptor(rotationDescriptor);
+
+                        const rotatedBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
+                        const rotatedBoard = rotatedBlocks.map(block => block.innerText || null);
+                        const blockedReplaced = rotatedBoard[blockedIndex] === player;
+                        const essentialsPreserved = playerIndices.every(index => rotatedBoard[index] === player);
+                        const safeAfterRotation = !opponentsHaveImmediateWin();
+
+                        restoreCubeState(snapshot);
+
+                        if (blockedReplaced && essentialsPreserved && safeAfterRotation) {
+                            return {
+                                placeFace: adjFace,
+                                placeIndex: adj.newNumber,
+                                rotationId,
+                                rotationDir,
+                                reason: `setup rotation to replace blocker on ${face}`
+                            };
+                        }
+                    } catch (e) {
+                        continue;
+                    }
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+function hasBlockedWinPatternFor(player) {
+    const opponentSet = new Set(players.filter(p => p !== player));
+
+    for (const face of faces) {
+        const blocks = Array.from(document.querySelectorAll(`.${face} .block`));
+        const board = blocks.map(block => block.innerText || null);
+
+        for (const pattern of winningCombinations) {
+            const values = pattern.map(index => board[index]);
+            const playerCount = values.filter(value => value === player).length;
+            const opponentCount = values.filter(value => opponentSet.has(value)).length;
+            const emptyCount = values.filter(value => value === null).length;
+
+            if (playerCount === 2 && opponentCount === 1 && emptyCount === 0) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function hasRotationWinSetupFor(player) {
+    const opponentSet = new Set(players.filter(p => p !== player));
+    const directions = ['up', 'down', 'left', 'right'];
+
+    for (const face of faces) {
+        const blocks = Array.from(document.querySelectorAll(`.${face} .block`));
+        const board = blocks.map(block => block.innerText || null);
+
+        for (const pattern of winningCombinations) {
+            const values = pattern.map(index => board[index]);
+            const playerCount = values.filter(value => value === player).length;
+            const opponentCount = values.filter(value => opponentSet.has(value)).length;
+            const emptyCount = values.filter(value => value === null).length;
+
+            if (playerCount === 2) {
+                
+                const blockedIndex = pattern.find(index => board[index] !== player);
+                console.log("Brent test pattern", pattern, face, player, blockedIndex)
+                if (typeof blockedIndex !== 'number') continue;
+
+                const playerIndices = pattern.filter(index => board[index] === player);
+                console.log("Brent test playerIndices", playerIndices)
+                if (playerIndices.length !== 2) continue;
+
+                for (const dir of directions) {
+                    console.log("Brent test direction", dir)
+                    try {
+                        const adj = getAdjacentFaceAndNumber(face, dir, blockedIndex);
+                        if (!adj || !adj.newFace || adj.newNumber === null || Number.isNaN(adj.newNumber)) continue;
+
+                        const adjFace = adj.newFace === 'up' ? 'top' : (adj.newFace === 'down' ? 'bottom' : adj.newFace);
+                        const adjBlocks = Array.from(document.querySelectorAll(`.${adjFace} .block`));
+                        const sourceBlock = adjBlocks[adj.newNumber];
+                        //console.log("Brent test", adj, face, pattern)
+                        if (!sourceBlock || (sourceBlock.innerText || '').trim() !== player) continue;
+                        console.log("Brent test passed", { face, dir, blockedIndex, adjFace, sourceBlock, adjNumber: adj.newNumber })
+                        const rotationDir = getFaceRelation(adj.newFace, face);
+                        const rotationId = `${faceToLetter(adj.newFace)}${adj.newNumber}`;
+                        const rotationDescriptor = getRotationDescriptorFromMove(rotationId, rotationDir);
+                        if (!rotationDescriptor) continue;
+
+                        const snapshot = snapshotCubeState();
+                        applyRotationDescriptor(rotationDescriptor);
+
+                        const rotatedBlocks = Array.from(document.querySelectorAll(`.${face} .block`));
+                        const rotatedBoard = rotatedBlocks.map(block => block.innerText || null);
+                        const blockedReplaced = rotatedBoard[blockedIndex] === player;
+                        const essentialsPreserved = playerIndices.every(index => rotatedBoard[index] === player);
+
+                        restoreCubeState(snapshot);
+
+                        if (blockedReplaced && essentialsPreserved) {
+                            return true;
+                        }
+                    } catch (e) {
+                        continue;
+                    }
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+function getOpponentForkState(opponent) {
+    let hasFork = false;
+    let hasImmediateWin = false;
+
+    for (const face of faces) {
+        const blocks = Array.from(document.querySelectorAll(`.${face} .block`));
+        const board = blocks.map(block => block.innerText || null);
+        const immediateMoves = getImmediateWinningMoves(board, opponent);
+        if (immediateMoves.length >= 2) {
+            hasFork = true;
+        }
+        if (immediateMoves.length > 0) {
+            hasImmediateWin = true;
+        }
+    }
+
+    return { hasFork, hasImmediateWin };
+}
+
+function applyRotationDescriptor(rotation) {
+    if (!rotation) return;
+    const { type, index, direction } = rotation;
+    const repeats = (direction === 'left' || direction === 'up') ? 3 : 1;
+
+    for (let i = 0; i < repeats; i++) {
+        if (type === 'row') {
+            rotateRow(index);
+        } else if (type === 'column') {
+            rotateColumn(index);
+        } else if (type === 'scolumn') {
+            rotateSColumn(index);
+        }
+    }
+}
+
+function getRotationDescriptorFromMove(blockId, direction) {
+    if (!blockId || typeof blockId !== 'string') return null;
+    if (!direction || typeof direction !== 'string') return null;
+
+    const face = blockId[0];
+    const number = parseInt(blockId[1], 10);
+    if (Number.isNaN(number)) return null;
+
+    const row = Math.floor(number / 3);
+    const col = number % 3;
+    const angle = (direction === 'left' || direction === 'right') ? 'horizontal'
+        : (direction === 'up' || direction === 'down') ? 'vertical' : null;
+    if (!angle) return null;
+
+    if (angle === 'horizontal') {
+        switch (face) {
+            case 'f':
+            case 'b':
+            case 'l':
+            case 'r':
+                return { type: 'row', index: row, direction };
+            case 'd': {
+                const mirrored = mirrorRowOrColumn(row);
+                return { type: 'scolumn', index: mirrored, direction };
+            }
+            case 'u': {
+                const normalizedDir = direction === 'right' ? 'left' : 'right';
+                return { type: 'scolumn', index: row, direction: normalizedDir };
+            }
+            default:
+                return null;
+        }
+    }
+
+    switch (face) {
+        case 'f':
+        case 'u':
+        case 'd':
+            return { type: 'column', index: col, direction };
+        case 'b': {
+            const mirrored = mirrorRowOrColumn(col);
+            const normalizedDir = direction === 'down' ? 'up' : 'down';
+            return { type: 'column', index: mirrored, direction: normalizedDir };
+        }
+        case 'l':
+            return { type: 'scolumn', index: col, direction };
+        case 'r': {
+            const mirrored = mirrorRowOrColumn(col);
+            const normalizedDir = direction === 'down' ? 'up' : 'down';
+            return { type: 'scolumn', index: mirrored, direction: normalizedDir };
+        }
+        default:
+            return null;
+    }
+}
+
+function isRotationHintStillValid(plannedHint, player) {
+    if (!plannedHint || plannedHint.player !== player) return false;
+
+    const rotationBlock = document.getElementById(plannedHint.rotationId);
+    if (!rotationBlock || rotationBlock.innerText !== player) return false;
+
+    const rotationDescriptor = getRotationDescriptorFromMove(plannedHint.rotationId, plannedHint.rotationDir);
+    if (!rotationDescriptor) return false;
+
+    const snapshot = snapshotCubeState();
+    applyRotationDescriptor(rotationDescriptor);
+
+    let createsWin = false;
+    for (const face of faces) {
+        const blocks = Array.from(document.querySelectorAll(`.${face} .block`));
+        const winners = checkWin(blocks);
+        if (winners.includes(player)) {
+            createsWin = true;
+            break;
+        }
+    }
+
+    restoreCubeState(snapshot);
+    return createsWin;
+}
+
+function getRotationCandidates() {
+    const candidates = [];
+    for (let i = 0; i < 3; i++) {
+        candidates.push({ type: 'row', index: i, direction: 'right', id: `f${i * 3}` });
+        candidates.push({ type: 'row', index: i, direction: 'left', id: `f${i * 3}` });
+        candidates.push({ type: 'column', index: i, direction: 'down', id: `f${i}` });
+        candidates.push({ type: 'column', index: i, direction: 'up', id: `f${i}` });
+        candidates.push({ type: 'scolumn', index: i, direction: 'down', id: `l${i}` });
+        candidates.push({ type: 'scolumn', index: i, direction: 'up', id: `l${i}` });
+    }
+    return candidates;
+}
+
+function findForkBreakingRotation(current, opponents) {
+    for (const opponent of opponents) {
+        const forkState = getOpponentForkState(opponent);
+        if (!forkState.hasFork) continue;
+
+        const candidates = getRotationCandidates();
+        for (const candidate of candidates) {
+            const snapshot = snapshotCubeState();
+            applyRotationDescriptor(candidate);
+
+            const afterState = getOpponentForkState(opponent);
+            const safe = !afterState.hasImmediateWin && !afterState.hasFork;
+
+            restoreCubeState(snapshot);
+
+            if (safe) {
+                return {
+                    id: candidate.id,
+                    direction: candidate.direction,
+                    reason: `rotate to break ${opponent} fork`
+                };
+            }
+        }
+    }
+
+    return null;
+}
+
+function getOptimalMoveSuggestion(player) {
+    const opponents = players.filter(p => p !== player);
+
+    const getBoardForFace = (face) => {
+        const blocks = Array.from(document.querySelectorAll(`.${face} .block`));
+        return {
+            blocks,
+            board: blocks.map(block => block.innerText || null)
+        };
+    };
+
+    if (plannedRotationHint) {
+        const { player: plannedPlayer, rotationId, rotationDir } = plannedRotationHint;
+        const rotationBlock = document.getElementById(rotationId);
+
+        if (plannedPlayer === player && rotationBlock && rotationBlock.innerText === player && isRotationHintStillValid(plannedRotationHint, player)) {
+            return { face: rotationId, move: rotationDir, reason: 'rotate to complete setup' };
+        }
+
+        if (!rotationBlock || rotationBlock.innerText !== plannedPlayer || !isRotationHintStillValid(plannedRotationHint, player)) {
+            plannedRotationHint = null;
+        }
+    }
+
+    for (const opponent of opponents) {
+        if (opponent && hasRotationWinSetupFor(opponent)) {
+            return { face: 'notice', move: 'get rid of rotation attempt', reason: 'rotation threat' };
+        }
+    }
+
+    // 1) Win now if possible.
+    for (const face of faces) {
+        const { board } = getBoardForFace(face);
+        const result = minTurnsToWin(board, player);
+        if (result && result.turns === 1) {
+            const moveIndex = result.pattern.find(index => board[index] === null);
+            if (typeof moveIndex === 'number') {
+                return { face, move: moveIndex, reason: 'win now' };
+            }
+        }
+    }
+
+    // 2) Block any opponent's immediate win.
+    const immediateThreats = [];
+    const threatKeys = new Set();
+    for (const opponent of opponents) {
+        for (const face of faces) {
+            const { board } = getBoardForFace(face);
+            const result = minTurnsToWin(board, opponent);
+            if (result && result.turns === 1) {
+                const moveIndex = result.pattern.find(index => board[index] === null);
+                if (typeof moveIndex === 'number') {
+                    const key = `${face}:${moveIndex}`;
+                    if (!threatKeys.has(key)) {
+                        threatKeys.add(key);
+                        immediateThreats.push({ face, move: moveIndex, opponent });
+                    }
+                }
+            }
+        }
+    }
+
+    if (threatKeys.size > 1) {
+        return {
+            noticeMessage: `multiple ${threatKeys.size} threats detected that can't all be blocked by signs`
+        };
+    }
+
+    if (immediateThreats.length === 1) {
+        const only = immediateThreats[0];
+        return { face: only.face, move: only.move, reason: `block ${only.opponent}` };
+    }
+
+    // 3) Rotation setup: place on adjacent face to replace a blocker, then rotate next turn.
+    const rotationSetup = getRotationSetupHint(player);
+    if (rotationSetup) {
+        plannedRotationHint = {
+            player,
+            rotationId: rotationSetup.rotationId,
+            rotationDir: rotationSetup.rotationDir
+        };
+
+        return {
+            face: rotationSetup.placeFace,
+            move: rotationSetup.placeIndex,
+            reason: rotationSetup.reason
+        };
+    }
+
+    // 4) If an opponent has a fork, suggest a rotation to break it safely.
+    const rotationHint = findForkBreakingRotation(player, opponents);
+    if (rotationHint) {
+        return { face: rotationHint.id, move: rotationHint.direction, reason: rotationHint.reason };
+    }
+
+    // 5) Prefer the shortest path to a win.
+    let best = null;
+    let bestTurns = Infinity;
+    for (const face of faces) {
+        const { board } = getBoardForFace(face);
+        const result = minTurnsToWin(board, player);
+        if (result && result.turns > 0 && result.turns < bestTurns) {
+            const moveIndex = result.pattern.find(index => board[index] === null);
+            if (typeof moveIndex === 'number') {
+                bestTurns = result.turns;
+                best = { face, move: moveIndex, reason: `setup win in ${bestTurns} turn(s)` };
+            }
+        }
+    }
+
+    if (best) return best;
+
+    // 4) Fallback: center, then any open spot.
+    for (const face of faces) {
+        const { board } = getBoardForFace(face);
+        if (board[4] === null) {
+            return { face, move: 4, reason: 'take center' };
+        }
+    }
+
+    for (const face of faces) {
+        const { board } = getBoardForFace(face);
+        const moveIndex = board.findIndex(cell => cell === null);
+        if (moveIndex !== -1) {
+            return { face, move: moveIndex, reason: 'any open spot' };
+        }
+    }
+
+    return null;
 }
 
 // Function to check if a player has won on a cube face
 function checkCubeWin() {
+    if (replayMode) {
+        return;
+    }
     console.log("Winner", currentPlayer)
 
     const overallWinners = new Map();
@@ -621,6 +1596,10 @@ function resetGame() {
 
     currentPlayerIndex = 0;
     currentPlayer = players[currentPlayerIndex];
+
+    moveHistory.length = 0;
+    setReplayBaseState();
+    refreshReplayUI();
 
     // Reset scoreboard display
 }
@@ -857,9 +1836,10 @@ function rotateFace(face, direction) {
 }
 let startBlock = null;      // Store the block where the drag starts
 let startX = 0, startY = 0; // Store the initial coordinates of mousedown
+let touchStartBlock = null;
+let touchStartX = 0;
+let touchStartY = 0;
 
-// Global move history stack to keep track of moves
-const moveHistory = [];
 
 function getRowOrColumn(blockId, direction, skipHistory = false) {
     const face = blockId[0];                  // Get the face letter from the first character of the ID
@@ -868,6 +1848,10 @@ function getRowOrColumn(blockId, direction, skipHistory = false) {
     const col = blockNumber % 3;              // Calculate column (0, 1, 2)
     let angle = "";
     let mirroredCol = "";
+
+    if (!skipHistory && replayState.active) {
+        commitReplayBranch();
+    }
 
     // Determine the angle and direction of the swipe
     switch (direction) {
@@ -901,6 +1885,7 @@ function getRowOrColumn(blockId, direction, skipHistory = false) {
             direction,
             angle
         });
+        notifyMoveHistoryUpdated();
     }
 
     // Handle the rotation based on direction and face
@@ -992,11 +1977,11 @@ function getRowOrColumn(blockId, direction, skipHistory = false) {
                                 rotateColumn(mirroredCol); // Counterclockwise
                             }
                             
-                            console.log(`Rotated column ${mirroredCol} on face ${face} clockwise`);
+                            console.log(`Rotated column ${mirroredCol} on face ${face} counterclockwise`);
                             break;
                         case 'up':
                             rotateColumn(mirroredCol);
-                            console.log(`Rotated column ${mirroredCol} on face ${face} counterclockwise`);
+                            console.log(`Rotated column ${mirroredCol} on face ${face} clockwise`);
                             break;
                     }
                     break;
@@ -1050,38 +2035,60 @@ function getRowOrColumn(blockId, direction, skipHistory = false) {
     }
     checkCubeWin();
     
-
-    currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-    currentPlayer = players[currentPlayerIndex];
-    updateScoreboard()
-    console.log("Next turn: Player", currentPlayer);
+    nextTurn()
     
-    if (aiMode === true && currentPlayer === "O") {
+    if (!replayMode && aiMode === true && currentPlayer === "O") {
        
         setTimeout(() => {
-            const content = document.querySelector(
-                `div#${rotationData[0][0]}.block`
-            )
-            console.log(evaluateFacePriority(), "Bobby yoyo", rotationData[0], content.textContent, "Test", getAdjacentFaceAndNumber(currentFace, rotationData[0][1], rotationData[0][[0]])) //Make the last part of this work properly, so out of 0,0, just get the number.
-          
-            const priorityMove = evaluateFacePriority();
-            console.log(priorityMove, "priority", filteredAiResults[0].turns, JSON.stringify(filteredAiResults))
-
-            if (priorityMove && (faceToLetter(priorityMove.face) + priorityMove.move) !== rotationData[0][0] || content.textContent !== "O") {
-                //The above if case makes it so that if the AI can win with an unblockable move it will perform that, otherwise it will not.
-                // Make the move based on priority evaluation TODO: Right now this is redundant code, make a function for this code so that I can use ot twice with not double the amount of code.
-                const faceBlocks = Array.from(document.querySelectorAll(`.${priorityMove.face} .block`));
-                faceBlocks[priorityMove.move].innerText = aiPlayer;
-                console.log("Ai move O Oh no", priorityMove.face, priorityMove.move, filteredAiResults[0])
-                if (priorityMove.move === 4 && middleTactic === false) {
-                    console.log("An attempt to activate the middle tactic")
-                    middleTactic = true
+            try {
+                // Guard against missing rotationData or DOM elements
+                if (!Array.isArray(rotationData) || rotationData.length === 0) {
+                    aiMove();
+                    checkCubeWin();
+                    return;
                 }
-            } else {
-                aiMove();
+
+                const queuedId = rotationData[0] && rotationData[0][0] ? rotationData[0][0] : null;
+                const content = queuedId ? document.querySelector(`div#${queuedId}.block`) : null;
+
+                // Safely compute a debug adjacency if possible
+                try {
+                    const adjDebug = (typeof currentFace !== 'undefined' && rotationData[0]) ? getAdjacentFaceAndNumber(currentFace, rotationData[0][1], rotationData[0][0]) : null;
+                    console.log(evaluateFacePriority(), "Bobby yoyo", rotationData[0], content ? content.textContent : null, "Test", adjDebug);
+                } catch (e) {
+                    console.log('Debug adjacency failed', e);
+                }
+
+                const priorityMove = evaluateFacePriority();
+                console.log('priority', priorityMove, 'filteredAiResults', filteredAiResults && filteredAiResults[0] ? filteredAiResults[0].turns : null);
+
+                const shouldActByPriority = priorityMove && queuedId && ((faceToLetter(priorityMove.face) + priorityMove.move) !== queuedId || (content && content.textContent !== 'O'));
+
+                if (shouldActByPriority) {
+                    // Apply the priority move
+                    const faceBlocks = Array.from(document.querySelectorAll(`.${priorityMove.face} .block`));
+                    if (faceBlocks[priorityMove.move]) {
+                        faceBlocks[priorityMove.move].innerText = aiPlayer;
+                        console.log('Ai move O defended but should probably have rotated');
+                        nextTurn()
+    console.log("Next turn: Player", currentPlayer);
+                        if (priorityMove.move === 4 && middleTactic === false) {
+                            middleTactic = true;
+                        }
+                    } else {
+                        console.warn('Priority target block missing', priorityMove);
+                        aiMove();
+                    }
+                } else {
+                    aiMove();
+                }
+
+                checkCubeWin();
+            } catch (e) {
+                console.error('Error in post-rotation AI handler', e);
+                try { aiMove(); } catch (er) { console.error('aiMove failed after handler error', er); }
             }
-                checkCubeWin()
-            }, 300);
+        }, 300);
             
         }
 }
@@ -1094,6 +2101,7 @@ function undoLastMove() {
 
     // Get the last move
     const lastMove = moveHistory.pop();
+    notifyMoveHistoryUpdated();
 
     if (lastMove.type === 'placement') {
         // Undo a block placement
@@ -1195,6 +2203,52 @@ function handleBlockMouseUp(event) {
     }
 }
 
+function handleBlockTouchStart(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const touch = event.touches[0];
+    touchStartBlock = event.target.closest('.block');
+    if (!touchStartBlock || !touch) return;
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+}
+
+function handleBlockTouchMove(event) {
+    event.preventDefault();
+    event.stopPropagation();
+}
+
+function handleBlockTouchEnd(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!touchStartBlock) return;
+    const touch = event.changedTouches[0];
+    if (!touch) {
+        touchStartBlock = null;
+        return;
+    }
+
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    const swipeThreshold = 20;
+
+    if (absX < swipeThreshold && absY < swipeThreshold) {
+        handleBlockClick({ target: touchStartBlock });
+        touchStartBlock = null;
+        return;
+    }
+
+    if (absX >= absY) {
+        getRowOrColumn(touchStartBlock.id, dx > 0 ? 'right' : 'left');
+    } else {
+        getRowOrColumn(touchStartBlock.id, dy > 0 ? 'down' : 'up');
+    }
+
+    touchStartBlock = null;
+}
+
 
 // Handle clicks on cells
 function handleCellClick(event, cell) {
@@ -1226,6 +2280,10 @@ const blockHistory = {}; // To track the history of signs on each block
 function handleBlockClick(event) {
     const block = event.target.closest('.block');
 
+    if (replayState.active) {
+        commitReplayBranch();
+    }
+
     // Double-click handling
     if (block.dataset.lastClickTime && Date.now() - block.dataset.lastClickTime < 300) {
         handleBlockRetake(block);
@@ -1243,7 +2301,10 @@ function handleBlockClick(event) {
                 type: 'placement',
                 blockId: block.id,
                 player: currentPlayer,
+                placedText: block.innerText,
             });
+            notifyMoveHistoryUpdated();
+            notifyMoveHistoryUpdated();
 
             console.log(`Player ${currentPlayer} placed ${currentPlayer} on ${block.id}`, block);
             
@@ -1315,6 +2376,7 @@ function handleBlockClick(event) {
                 type: 'placement',
                 blockId: block.id,
                 player: currentPlayer,
+                placedText: block.innerText,
             });
 
             // Save the move for Limited Signs Mode
@@ -1377,14 +2439,8 @@ function handleBlockClick(event) {
     console.log("Mostrecent", mostRecentFace)
 
     // Switch players
-    currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-    currentPlayer = players[currentPlayerIndex];
-    console.log("Next turn: Player", currentPlayer);
-    console.log("rotation data", JSON.stringify(rotationData))
-
-    checkCubeWin();
-    updateScoreboard();
-    if (aiMode === true) {
+    nextTurn()
+    if (!replayMode && aiMode === true) {
         setTimeout(() => {
             aiMove();
             
@@ -1411,11 +2467,7 @@ function handleBlockRetake(block) {
         console.log(`Player ${currentPlayer} retook their piece from ${block.id}`);
 
         // Switch players
-        currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-        currentPlayer = players[currentPlayerIndex];
-        console.log("Next turn: Player", currentPlayer);
-
-        updateScoreboard();
+        nextTurn()
     } else {
         console.log("Invalid retake: Block does not belong to the current player.");
     }
@@ -1425,8 +2477,9 @@ function handleBlockRetake(block) {
 document.querySelectorAll('.block').forEach(element => {
     element.addEventListener('mousedown', handleBlockMouseDown);
     element.addEventListener('mouseup', handleBlockMouseUp);
-    element.addEventListener('touchstart', handleBlockMouseDown);
-    element.addEventListener('touchend', handleBlockMouseUp);
+    element.addEventListener('touchstart', handleBlockTouchStart, { passive: false });
+    element.addEventListener('touchmove', handleBlockTouchMove, { passive: false });
+    element.addEventListener('touchend', handleBlockTouchEnd, { passive: false });
 });
 
 // Attach event listeners for cells to handle direct clicks
@@ -1467,6 +2520,8 @@ function resetCubeRotation() {
 }
 
 initializeGame("classic", 2);
+setupReplayControls();
+setupCubeDragArea();
 
 
 function scrambleCube() {
@@ -1707,6 +2762,20 @@ function enableAiMode() {
 function aiMove() {
     let moveMade = false;
     console.log("initiate ai move")
+    // If a rotation was queued on a previous turn, execute or reapply it now at the start of the AI's turn.
+    if (rotationData.length > 0) {
+        try {
+            const rotated = rotateAi();
+            // If rotateAi performed a rotation or reapply that consumed the turn, stop further AI actions.
+            if (rotated) {
+                nextTurn()
+                return;
+            }
+        } catch (e) {
+            console.error('aiMove: rotateAi threw', e);
+            // Continue to decision-making if rotation handling fails
+        }
+    }
     
     let bestFace = null;
     let bestMove = -1;
@@ -1714,6 +2783,21 @@ function aiMove() {
     aiPlayer = 'O';
     humanPlayer = 'X';
     console.log("rotate Ai, checkdrawstate")
+
+    // Helper: find any immediate winning move for AI across all faces (returns {face, move} or null)
+    function findImmediateAiWin() {
+        for (const face of faces) {
+            const faceClass = face === 'up' ? 'top' : (face === 'down' ? 'bottom' : face);
+            const faceBlocks = Array.from(document.querySelectorAll(`.${faceClass} .block`));
+            const board = faceBlocks.map(b => b.innerText || null);
+            const res = minTurnsToWin(board, aiPlayer);
+            if (res && res.turns === 1) {
+                const moveIndex = res.pattern.find(i => board[i] === null);
+                if (typeof moveIndex === 'number') return { face, move: moveIndex };
+            }
+        }
+        return null;
+    }
 
 
     function isWin(board, player) {
@@ -2115,8 +3199,8 @@ function aiMove() {
         const faceBlocksMostRecentFace = Array.from(document.querySelectorAll(`.${mostRecentFace} .block`)); 
         console.log("Puglin ", faceBlocksMostRecentFace)
         const mostRecentBoard = faceBlocksMostRecentFace.map(block => block.innerText || null);
-        console.log("rotate Ai, checkdrawstate")
-        rotateAi()
+    console.log("rotate Ai, checkdrawstate")
+    // Rotation handling deferred to aiMove start; do not call rotateAi() here.
         
     
         if (priorityAi.length > 0) {
@@ -2221,9 +3305,7 @@ function aiMove() {
     
                         // After making the move, stop further checks
                         moveMade = true;  // Mark that a move has been made
-                        currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-                        currentPlayer = players[currentPlayerIndex];
-                        updateScoreboard()
+                        nextTurn()
 
                     } else {
                         console.log(`Block with index ${newNumber} on face ${newFace} is already occupied.`);
@@ -2250,8 +3332,7 @@ function aiMove() {
                     let toChangeNumber = checkDiagonalForTwoOs(board)
                     toChangeNumber = getAdjacentFaceAndNumber(mostRecentFace, getFaceRelation(mostRecentFace, drawFace), toChangeNumber).newNumber
                     console.log("AI move VI", toChangeNumber, checkDiagonalForTwoOs(board), getFaceRelation(mostRecentFace, drawFace), mostRecentFace, drawFace)
-                    currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-                    currentPlayer = players[currentPlayerIndex];
+                    nextTurn()
                     console.log("Next turn: Player 55", currentPlayer, block, getFaceRelation(drawFace, mostRecentFace), drawFace, mostRecentFace); //TODO: use something like , result.currentFace, result.newFace) but of which I can access in here.
                     
                     updateScoreboard()
@@ -2291,88 +3372,148 @@ function aiMove() {
         const priorityMove = evaluateFacePriority();
         console.log(priorityMove, "priority")
 
-        // Helper: detect if AI has exactly 2 'O's and 1 'X' in a win pattern on a face
-        function detectBlockedTwoOnFace(face) {
-            if (!face) return null;
-            const faceClass = face.length === 1 ? (face === 'u' ? 'top' : (face === 'd' ? 'bottom' : ({f:'front',b:'back',l:'left',r:'right'})[face])) : (face === 'up' ? 'top' : (face === 'down' ? 'bottom' : face));
-            const faceBlocks = Array.from(document.querySelectorAll(`.${faceClass} .block`));
-            const board = faceBlocks.map(b => b.innerText || null);
+        // Attempt a global rotation-based unblock setup before applying the priority move.
+        // This scans all faces for patterns where AI has two 'O's and one 'X' (blocked two).
+        // If an adjacent face cell can rotate into the blocked spot, place 'O' there and queue the rotation.
+        function attemptGlobalRotationSetup() {
             const winPatterns = [
                 [0, 1, 2], [3, 4, 5], [6, 7, 8],
                 [0, 3, 6], [1, 4, 7], [2, 5, 8],
                 [0, 4, 8], [2, 4, 6]
             ];
 
-            for (const pattern of winPatterns) {
-                const oCount = pattern.filter(i => board[i] === 'O').length;
-                const xCount = pattern.filter(i => board[i] === 'X').length;
-                if (oCount === 2 && xCount === 1) {
-                    const blockedIndex = pattern.find(i => board[i] === 'X');
-                    return { blockedIndex, pattern };
-                }
-            }
-            return null;
-        }
+            // Collect all candidates first so we can prioritize diagonals over rows.
+            const candidates = [];
 
-        // Helper: try to setup rotation for a given face+blockedIndex (returns true if placed)
-        function setupRotationForFace(face, blockedIndex) {
-            try {
-                const directions = ['left', 'right', 'up', 'down'];
-                for (const dir of directions) {
-                    try {
-                        const adj = getAdjacentFaceAndNumber(face, dir, blockedIndex);
-                        const adjFace = adj.newFace;
-                        const adjNumber = adj.newNumber;
-                        const adjFaceClass = adjFace === 'up' ? 'top' : (adjFace === 'down' ? 'bottom' : adjFace);
-                        const adjBlocks = Array.from(document.querySelectorAll(`.${adjFaceClass} .block`));
-                        if (adjBlocks[adjNumber] && (adjBlocks[adjNumber].innerText || '').trim() === '') {
-                            // Place AI marker on adjacent free spot and queue rotation
-                            adjBlocks[adjNumber].innerText = 'O';
-                            aiUnblockableMove = true;
-                            rotationData.push([
-                                adjBlocks[adjNumber].id,
-                                getFaceRelation(adjFace, mostRecentFace),
-                                false
-                            ]);
-                            console.log('Immediate queued rotation-based unblock for face', face, 'blockedIndex', blockedIndex, '->', adjFace, adjNumber, rotationData);
-                            currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-                            currentPlayer = players[currentPlayerIndex];
-                            updateScoreboard();
-                            return true;
-                        }
-                    } catch (e) {
-                        continue; // try next direction
+            for (const face of faces) {
+                const faceClass = face === 'up' ? 'top' : (face === 'down' ? 'bottom' : face);
+                const faceBlocks = Array.from(document.querySelectorAll(`.${faceClass} .block`));
+                const board = faceBlocks.map(b => b.innerText || null);
+
+                for (const pattern of winPatterns) {
+                    const values = pattern.map(i => board[i]);
+                    const oCount = values.filter(v => v === 'O').length;
+                    const xCount = values.filter(v => v === 'X').length;
+
+                    if (oCount === 2 && xCount === 1) {
+                        const blockedIndex = pattern.find(i => board[i] === 'X');
+                        // Classify pattern type: 'diag', 'row', or 'col'
+                        const isRow = pattern.every(i => Math.floor(i / 3) === Math.floor(pattern[0] / 3));
+                        const isCol = pattern.every(i => (i % 3) === (pattern[0] % 3));
+                        const type = (!isRow && !isCol) ? 'diag' : (isRow ? 'row' : 'col');
+
+                        candidates.push({ face, faceClass, pattern, blockedIndex, type });
                     }
                 }
-            } catch (e) {
-                console.log('Error in setupRotationForFace', e);
             }
+
+            if (candidates.length === 0) return false;
+
+            // Priority order: diagonals -> rows -> columns
+            const priorityOrder = ['diag', 'row', 'col'];
+
+            for (const patType of priorityOrder) {
+                const group = candidates.filter(c => c.type === patType);
+                for (const candidate of group) {
+                    const { face, blockedIndex, pattern } = candidate;
+                    // Determine direction order based on orientation
+                    const firstRow = Math.floor(pattern[0] / 3);
+                    const isRow = pattern.every(i => Math.floor(i / 3) === firstRow);
+                    const firstCol = pattern[0] % 3;
+                    const isCol = pattern.every(i => (i % 3) === firstCol);
+
+                    let directions;
+                    if (isRow) {
+                        directions = ['up', 'left', 'right', 'down'];
+                    } else if (isCol) {
+                        directions = ['left', 'up', 'down', 'right'];
+                    } else {
+                        directions = ['up', 'left', 'right', 'down'];
+                    }
+
+                    for (const dir of directions) {
+                        try {
+                            const adj = getAdjacentFaceAndNumber(face, dir, blockedIndex);
+                            if (!adj || !adj.newFace || adj.newNumber === null || Number.isNaN(adj.newNumber)) continue;
+                            const adjFace = adj.newFace;
+                            const adjNumber = adj.newNumber;
+                            const adjFaceClass = adjFace === 'up' ? 'top' : (adjFace === 'down' ? 'bottom' : adjFace);
+                            const adjBlocks = Array.from(document.querySelectorAll(`.${adjFaceClass} .block`));
+
+                            if (adjBlocks[adjNumber] && (adjBlocks[adjNumber].innerText || '').trim() === '') {
+                                // Place AI marker on adjacent free spot and queue rotation
+                                setTimeout(() => {
+                                    try {
+                                        if (adjBlocks && adjBlocks[adjNumber]) adjBlocks[adjNumber].innerText = 'O';
+                                    } catch (e) {
+                                        console.error('Error setting adjBlocks innerText in attemptGlobalRotationSetup', e);
+                                    }
+                                }, 50);
+                                setTimeout(() => {
+                                    try {
+                                        const blockEl = adjBlocks && adjBlocks[adjNumber] ? adjBlocks[adjNumber] : null;
+                                        if (!blockEl) {
+                                            console.warn('attemptGlobalRotationSetup: expected adj block not found at execution time', { adjFace, adjNumber });
+                                        } else {
+                                            aiUnblockableMove = true;
+                                            const added = addRotationEntry(blockEl.id, getFaceRelation(adjFace, mostRecentFace), false);
+                                            console.log('Queued global rotation-based unblock:', adjFace, adjNumber, '->', face, blockedIndex, rotationData, 'addRotationEntry returned', added);
+                                        }
+                                    } catch (e) {
+                                        console.error('Error queuing rotation in attemptGlobalRotationSetup', e);
+                                    }
+                                }, 60);
+
+                                // Advance turn and indicate we made a move
+                                nextTurn()
+                                return true;
+                            }
+                        } catch (e) {
+                            continue;
+                        }
+                    }
+                }
+            }
+
             return false;
         }
 
-        // If AI has a blocked two on the most recent face and there's no priority that forces play on that face,
-        // immediately set up the rotation-based unblock instead of stalling.
-        const normalizedRecentFace = (mostRecentFace && mostRecentFace.length === 1) ? ({f:'front',b:'back',l:'left',r:'right',u:'up',d:'down'})[mostRecentFace] : mostRecentFace;
-        const blockedInfo = detectBlockedTwoOnFace(normalizedRecentFace);
-        if (blockedInfo) {
-            // Determine if there's an urgent reason NOT to setup rotation: immediate AI win or immediate player win
-            const aiImmediateWin = Array.isArray(filteredAiResults) && filteredAiResults[0] && typeof filteredAiResults[0].turns === 'number' && filteredAiResults[0].turns <= 1;
-            const playerImmediateWin = Array.isArray(filteredHumanResults) && filteredHumanResults[0] && typeof filteredHumanResults[0].turns === 'number' && filteredHumanResults[0].turns === 1;
-            const priorityOnSameFace = priorityMove && priorityMove.face === normalizedRecentFace;
+        // If there's an immediate human 1-turn win threat, prefer blocking it over setting up rotations.
+        const hasImmediateHumanThreat = faces.some(face => {
+            const faceClass = face === 'up' ? 'top' : (face === 'down' ? 'bottom' : face);
+            const faceBlocks = Array.from(document.querySelectorAll(`.${faceClass} .block`));
+            const board = faceBlocks.map(b => b.innerText || null);
+            const res = minTurnsToWin(board, humanPlayer);
+            return res && res.turns === 1;
+        });
 
-            const shouldSkipBecausePriority = aiImmediateWin || playerImmediateWin || priorityOnSameFace;
-
-            if (!shouldSkipBecausePriority) {
-                const didSetup = setupRotationForFace(normalizedRecentFace, blockedInfo.blockedIndex);
-                if (didSetup) {
-                    console.log('AI immediately set up rotation for blocked two on recent face', normalizedRecentFace);
-                    // We've made the move and queued rotation; don't continue with other move logic
-                    return;
-                }
+        if (!hasImmediateHumanThreat) {
+            // If a rotation setup was placed, stop further move processing this turn.
+            if (attemptGlobalRotationSetup()) {
+                console.log('AI performed a global rotation-setup before priority move');
+                return;
             }
+        } else {
+            console.log('Immediate human threat detected; skipping global rotation setup');
         }
 
         if (priorityMove) {
+            // Final safeguard: if AI has any immediate (1-turn) win available, take it now instead of the priority move.
+            try {
+                const immediate = findImmediateAiWin();
+                if (immediate) {
+                    const faceClass = immediate.face === 'up' ? 'top' : (immediate.face === 'down' ? 'bottom' : immediate.face);
+                    const faceBlocks = Array.from(document.querySelectorAll(`.${faceClass} .block`));
+                    if (faceBlocks[immediate.move] && !(faceBlocks[immediate.move].innerText || '').trim()) {
+                        faceBlocks[immediate.move].innerText = aiPlayer;
+                        console.log('AI took immediate win instead of priority move', immediate);
+                        nextTurn()
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('Error while applying immediate AI win safeguard', e);
+            }
             // Make the move based on priority evaluation
             const faceBlocks = Array.from(document.querySelectorAll(`.${priorityMove.face} .block`));
             faceBlocks[priorityMove.move].innerText = aiPlayer;
@@ -2414,11 +3555,7 @@ function aiMove() {
 
     // Switch to the next player
     checkDrawState()
-    currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-    currentPlayer = players[currentPlayerIndex];
-    console.log("Next turn: Player", currentPlayer);
-    console.log("score update")
-    updateScoreboard()
+    nextTurn()
 }
 
 function getAdjacentFaceAndNumber(currentFace, direction, number) {
@@ -2991,31 +4128,47 @@ function determineRowOrColumn(num1, num2) {
 
 function rotateAi() {
     console.log("rotate ai", rotationData, rotationData.length, aiUnblockableMove)
-    if (rotationData.length === 1 && aiUnblockableMove === true && moveMade === false) {
+    const currentMoveMade = (typeof moveMade !== 'undefined') ? moveMade : false;
+    if (rotationData.length === 1 && aiUnblockableMove === true && currentMoveMade === false) {
         console.log("Defend 2 check", rotationData[0], aiDefense)
-        if (document.querySelector(`div#${rotationData[0][0]}.block`).innerText == "O" | aiDefense ) {
-            console.log("HE did?", rotationData[0][0])
-            // Extract the first entry from the array
-            const [id, faceRelation, skipHistory] = rotationData[0];
+        try {
+            const queuedEl = document.querySelector(`div#${rotationData[0][0]}.block`);
+            if ((queuedEl && queuedEl.innerText === "O") || aiDefense) {
+                console.log("HE did?", rotationData[0][0])
+                // Extract the first entry from the array
+                const [id, faceRelation, skipHistory] = rotationData[0];
 
-            // Trigger the function with the extracted values
-            getRowOrColumn(id, faceRelation, skipHistory);
+                // Trigger the function with the extracted values
+                getRowOrColumn(id, faceRelation, skipHistory);
 
-            // Remove the first entry from the array after use
-            console.log("Rotation removed")
-            rotationData.shift();
-            currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-            currentPlayer = players[currentPlayerIndex];
-            console.log("Next turn: Player", currentPlayer);
-            updateScoreboard();
-            noBreak = false
-            return;
-        } else if (document.querySelector(`div#${rotationData[0][0]}.block`).innerText == "") {
-            console.log("Player has tried to swipe it away but this revealed an empty block.")
-            document.querySelector(`div#${rotationData[0][0]}.block`).innerText = "O"
+                // Remove the first entry from the array after use
+                console.log("Rotation removed")
+                rotationData.shift();
+                nextTurn()
+                noBreak = false
+                return true;
+            } else {
+                try {
+                    const queuedEl2 = document.querySelector(`div#${rotationData[0][0]}.block`);
+                    if (queuedEl2 && queuedEl2.innerText === "") {
+                        console.log("Player has tried to swipe it away but this revealed an empty block.")
+                        // Reapply the AI marker and consume the AI's turn (do not execute the rotation now)
+                        queuedEl2.innerText = "O";
+                        nextTurn()
+                        console.log('Aimove unblock reset');
+                        return true;
+                    }
+                } catch (e) {
+                    console.warn('rotateAi: queued element missing or inaccessible', e);
+                }
+            }
+        } catch (e) {
+            console.error('rotateAi: error while processing rotationData entry', e);
+            return false;
         }
     } else {
-        moveMade = false
+        if (typeof moveMade !== 'undefined') moveMade = false;
+        return false;
     }
 }
 
@@ -3080,6 +4233,33 @@ function evaluateFacePriority() {
         // Log the filtered results with face information
         console.log("Filtered Human Results Across All Faces:", filteredHumanResults, filteredHumanResults[0]);
         console.log("Filtered Ai Results Across All Faces:", filteredAiResults);
+
+        // EARLY HIGH-PRIORITY CHECKS
+        // 1) If AI can win this turn on any face, take that winning move immediately.
+        if (Array.isArray(filteredAiResults) && filteredAiResults[0] && filteredAiResults[0].turns === 1) {
+            const winFace = filteredAiResults[0].face;
+            const faceClass = winFace === 'up' ? 'top' : (winFace === 'down' ? 'bottom' : winFace);
+            const faceBlocks = Array.from(document.querySelectorAll(`.${faceClass} .block`));
+            const board = faceBlocks.map(b => b.innerText || null);
+            const moveIndex = filteredAiResults[0].pattern.find(index => board[index] === null);
+            if (typeof moveIndex === 'number') {
+                console.log('evaluateFacePriority: AI immediate win found on', winFace, 'move', moveIndex);
+                return { face: winFace, move: moveIndex };
+            }
+        }
+
+        // 2) If the human can win this turn on any face, block that immediately.
+        if (Array.isArray(filteredHumanResults) && filteredHumanResults[0] && filteredHumanResults[0].turns === 1) {
+            const threatFace = filteredHumanResults[0].face;
+            const faceClass = threatFace === 'up' ? 'top' : (threatFace === 'down' ? 'bottom' : threatFace);
+            const faceBlocks = Array.from(document.querySelectorAll(`.${faceClass} .block`));
+            const board = faceBlocks.map(b => b.innerText || null);
+            const blockIndex = filteredHumanResults[0].pattern.find(index => board[index] === null);
+            if (typeof blockIndex === 'number') {
+                console.log('evaluateFacePriority: blocking human immediate win on', threatFace, 'move', blockIndex);
+                return { face: threatFace, move: blockIndex };
+            }
+        }
         
 
         for (let face of faces) {
@@ -3100,38 +4280,34 @@ function evaluateFacePriority() {
                 console.log("no priority list")
                 return { face, move: middleIndex };
             }
-    
-            if (playerMiddle === true) {
-                console.log("poglini, player middle", face, blockNumber, "pug") //TODO: The issue seems to be that for some reason this work properly, it think that if you put it anywhere in the middle it should put it in the front.
-                // Check if the player can win in one move
-                if (filteredHumanResults[0].turns === 1) {
-                    // Block the player's winning move
-                    playerMiddle = false; // Reset the flag
-                    playerMiddleArray = []
-                    console.log("Special")
-                    console.log("no priority list")
-                    return { face, move: humanResult.pattern.find(index => board[index] === null) }; //TODO: This face is not correct
-                }
-    
-                // Otherwise, check for corners
-                playerMiddle = false; // Reset the flag
+            const totalFilled = Array.from(document.querySelectorAll('.block')).filter(b => (b.innerText || '').trim() !== '').length;
+            if (totalFilled === 1) {
+                // Only trigger the "place on right-adjacent center" behavior when this is the
+                // player's first move (i.e., exactly one filled block exists on the whole cube).
                 
-                for (const cornerIndex of cornerIndices) {
-                    if (board[cornerIndex] === null) {
-                        console.log("Special", playerMiddleArray[0])
-                        if (playerMiddleArray[0] === "up") {
-                            playerMiddleArray[0] = "top";
-                        } else if (playerMiddleArray[0] === "down") {
-                            playerMiddleArray[0] = "bottom";
-                        }
-                        
-                        face = playerMiddleArray[0]
-                        playerMiddleArray = []
-                        console.log("no priority list")
-                        return { face, move: cornerIndex }; // Pick the first available corner, TODO: because of a mistake right now this always picks the same corner
+                if (playerMiddle === true) {
+                    // Player's first move was center: respond on the RIGHT-adjacent face center
+                    console.log("playerMiddle first-turn triggered", face, blockNumber);
+                    const source = (playerMiddleArray && playerMiddleArray[0]) ? playerMiddleArray[0] : face;
+                    // Helper: normalize getAdjacentFaceAndNumber results to the project's face names
+                    const normalizeFaceName = (f) => f === 'up' ? 'top' : (f === 'down' ? 'bottom' : f);
+
+                    try {
+                        const rightAdj = getAdjacentFaceAndNumber(source, 'right', 4);
+                        const targetFace = normalizeFaceName(rightAdj.newFace);
+                        // consume the marker only when we acted
+                        playerMiddle = false;
+                        playerMiddleArray = [];
+                        console.log('AI responding to player middle (first turn): placing center on', targetFace);
+                        return { face: targetFace, move: 4 };
+                    } catch (e) {
+                        console.log('Failed to compute right-adjacent face for', source, e);
+                        // keep playerMiddle untouched so other priority checks can still consider it
                     }
+                } else {
+                    return { face, move: middleIndex };
                 }
-                
+                // If not first move, fall through to regular priority logic (do not consume playerMiddle)
             }
 
             if (blockNumber === 5 || blockNumber === 3) {
@@ -3176,7 +4352,7 @@ function evaluateFacePriority() {
             // Check for future winning moves (both 1-turn and 2-turn)
             let blockingMove = null;
 
-            if (filteredAiResults[0].turns === 1 | rotationData.length === 1) {
+            if ((Array.isArray(filteredAiResults) && filteredAiResults[0] && filteredAiResults[0].turns === 1) || rotationData.length === 1) {
                 console.log("Check, immediate win AI")
                 faceBlocks = Array.from(document.querySelectorAll(`.${filteredAiResults[0].face} .block`));
                 //board = faceBlocks.map(block => block.innerText || null);
@@ -3184,8 +4360,9 @@ function evaluateFacePriority() {
                 console.log("no priority list")
                 if (rotationData.length === 1 && filteredAiResults[0].turns > 1) {
                     //TODO: The problem here is that if the ai has a easier win it won't use this, so make it like check if there isn't something where it can win close to instantly.
-                    console.log("Rotate ai", rotationData, "faceprioriy")
-                    rotateAi()
+                    console.log("Rotate ai deferred to AI start-of-turn", rotationData, "facepriority");
+                    // Do not execute rotateAi() here; rotations should only run at the start of aiMove.
+                    return null;
                 } else {
                     console.log("Rotation data length", rotationData.length)
                     return {
@@ -3205,7 +4382,7 @@ function evaluateFacePriority() {
                 
                 blockingMove = filteredHumanResults[0].pattern.find(index => board[index] === null);
                 console.log("Special", JSON.stringify(blockingMove), board, face, filteredHumanResults[0], allHumanResults)
-            } else if (filteredHumanResults.turns === 2) {
+            } else if (Array.isArray(filteredHumanResults) && filteredHumanResults[0] && filteredHumanResults[0].turns === 2) {
                 // Check for future winning move (2 turns)
                 faceBlocks = Array.from(document.querySelectorAll(`.${filteredHumanResults[0].face} .block`));
                 board = faceBlocks.map(block => block.innerText || null);
@@ -3251,15 +4428,15 @@ function evaluateFacePriority() {
             }
     
             // If the AI has a 2-turn winning opportunity, prioritize setting up that win
-            if (filteredAiResults.turns === 2) {
+            if (Array.isArray(filteredAiResults) && filteredAiResults[0] && filteredAiResults[0].turns === 2) {
                 console.log("Check, incoming win AI")
                 // AI can win in two moves, consider setting up
                 faceBlocks = Array.from(document.querySelectorAll(`.${filteredAiResults[0].face} .block`));
                 board = faceBlocks.map(block => block.innerText || null);
-                return { 
-                    face: filteredAiResults[0].face, 
+                return {
+                    face: filteredAiResults[0].face,
                     move: filteredAiResults[0].pattern.find(index => board[index] === null),
-                }
+                };
             }
         }
     
@@ -3307,3 +4484,10 @@ function evaluateFacePriority() {
         return minTurns === Infinity ? { turns: -1, pattern: [] } : { turns: minTurns, pattern: winningPattern };
     }
 
+function nextTurn() {
+    currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+    currentPlayer = players[currentPlayerIndex];
+    console.log("Next turn: Player", currentPlayer);
+    checkCubeWin();
+    updateScoreboard();
+}
