@@ -136,6 +136,7 @@ function setupCubeDragArea() {
     let dragging = false;
     let lastX = 0;
     let lastY = 0;
+    let lastTapTime = 0;
     const sensitivity = 0.4;
 
     const onStart = (x, y) => {
@@ -162,6 +163,11 @@ function setupCubeDragArea() {
         onStart(event.clientX, event.clientY);
     });
 
+    dragArea.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        resetCubeRotation();
+    });
+
     document.addEventListener('mousemove', (event) => {
         onMove(event.clientX, event.clientY);
     });
@@ -173,6 +179,13 @@ function setupCubeDragArea() {
     dragArea.addEventListener('touchstart', (event) => {
         event.preventDefault();
         if (!event.touches || !event.touches[0]) return;
+        const now = Date.now();
+        if (now - lastTapTime < 300) {
+            resetCubeRotation();
+            lastTapTime = 0;
+            return;
+        }
+        lastTapTime = now;
         onStart(event.touches[0].clientX, event.touches[0].clientY);
     }, { passive: false });
 

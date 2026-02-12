@@ -40,7 +40,7 @@
             height: 300px;
             border: 2px dashed #999;
             border-radius: 12px;
-            display: flex;
+            display: none;
             align-items: center;
             justify-content: center;
             color: #555;
@@ -111,9 +111,16 @@
             }
 
             #cubeDragArea {
+                display: flex;
                 width: 90vw;
                 max-width: 320px;
                 height: 120px;
+            }
+        }
+
+        @media (pointer: coarse) {
+            #cubeDragArea {
+                display: flex;
             }
         }
 
